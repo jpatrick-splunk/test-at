@@ -64,11 +64,13 @@ To backfill a day the first poll missed (for example rain on 29 September when l
 | rename "Weather.*" as *
 ```
 
-Open the **ZENTRA Weather** app for:
+If dashboards are empty, run this in Search (All time):
 
-- **Weather Overview** — latest values, temperature/humidity/wind/precip, map, logger table
-- **Logger Detail** — one serial (defaults to `z6-30302`)
-- **Data Quality** — freshness, error flags, volume
+```
+index=* (sourcetype=zentra:weather OR sourcetype=zentra_weather OR source=zentra_weather://*)
+```
+
+Events should land in `main` by default. If the input still uses `index=weather`, either create that index or change the input to `main`. Check `$SPLUNK_HOME/var/log/splunk/splunkd.log` for `zentra_weather` lines such as `no measurements parsed`.
 
 ## TLS, secrets, and certificates
 

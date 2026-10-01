@@ -163,6 +163,13 @@ def _poll_device(stanza_name: str, device_sn: str, settings: dict, checkpoint_di
         )
         for payload in pages:
             measurement_map, location_history = extract_measurement_map(payload)
+            if not measurement_map:
+                keys = sorted(payload.keys()) if isinstance(payload, dict) else [type(payload).__name__]
+                data_obj = payload.get("data") if isinstance(payload, dict) else None
+                log(
+                    "no measurements parsed for %s; top-level keys=%s data_type=%s"
+                    % (device_sn, keys, type(data_obj).__name__)
+                )
             events = normalize_readings(
                 measurement_map,
                 location_history=location_history,

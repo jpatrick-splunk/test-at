@@ -509,7 +509,7 @@
       "calculations": [],
       "constraints": [
         {
-          "search": "sourcetype=zentra:weather OR tag=weather"
+          "search": "sourcetype=zentra:weather OR sourcetype=zentra_weather OR tag=weather"
         }
       ]
     }

@@ -54,6 +54,7 @@ class ClientTests(unittest.TestCase):
         self.assertIn("start_mrid=50", url)
         self.assertNotIn("start_date=", url)
         self.assertIn("output_format=json", url)
+        self.assertIn("sort_by=ascending", url)
         self.assertIn("location=true", url)
 
     def test_fetch_readings_page_sends_auth_and_parses_json(self):

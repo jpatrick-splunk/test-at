@@ -102,6 +102,54 @@ class NormalizeTests(unittest.TestCase):
         events = normalize_readings(mapping, device_sn_fallback="z6-30302")
         self.assertEqual(events[0]["air_temperature"], 12.5)
 
+    def test_pandas_split_payload(self):
+        payload = {
+            "data": json.dumps(
+                {
+                    "columns": ["timestamp_utc", "Air Temperature", "Precipitation"],
+                    "data": [
+                        [1720000000, 24.7, 1.2],
+                        [1720000900, 25.1, 0.0],
+                    ],
+                }
+            )
+        }
+        mapping, _history = extract_measurement_map(payload)
+        events = normalize_readings(mapping, device_sn_fallback="z6-30302")
+        self.assertEqual(len(events), 2)
+        self.assertEqual(events[0]["air_temperature"], 24.7)
+        self.assertEqual(events[0]["precipitation"], 1.2)
+
+    def test_v5_values_payload(self):
+        payload = {
+            "metadata": {"device_id": "z6-30302"},
+            "values": [
+                {
+                    "measurement": "Precipitation",
+                    "unit": "mm",
+                    "value": 3.4,
+                    "timestamp": 1720000000,
+                    "reading_id": 50,
+                    "error_code": 0,
+                    "device_id": "z6-30302",
+                },
+                {
+                    "measurement": "Air Temperature",
+                    "unit": "°C",
+                    "value": 18.1,
+                    "timestamp": 1720000000,
+                    "reading_id": 50,
+                    "error_code": 0,
+                    "device_id": "z6-30302",
+                },
+            ],
+        }
+        mapping, _history = extract_measurement_map(payload)
+        events = normalize_readings(mapping, device_sn_fallback="z6-30302")
+        self.assertEqual(len(events), 1)
+        self.assertEqual(events[0]["precipitation"], 3.4)
+        self.assertEqual(events[0]["air_temperature"], 18.1)
+
     def test_location_picks_latest_not_after_timestamp(self):
         history = [
             {"Latitude": 1.0, "Longitude": 2.0, "timestamp_utc": 100},

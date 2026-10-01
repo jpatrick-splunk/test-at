@@ -51,7 +51,7 @@ def build_readings_url(
     end_mrid: Optional[int] = None,
     page_num: int = 1,
     per_page: int = 2000,
-    sort_by: str = "asc",
+    sort_by: str = "ascending",
     location: bool = True,
 ) -> str:
     base = api_base_url.rstrip("/") + READINGS_PATH
@@ -210,25 +210,131 @@ def next_page_number(payload: Dict[str, Any], current_page: int, per_page: int) 
 
 def extract_measurement_map(payload: Any) -> Tuple[Dict[str, Any], List[Dict[str, Any]]]:
     """Return (measurement_name -> sensor entries, location_history)."""
+    payload = _coerce_json_container(payload)
     location_history = _find_location_history(payload)
-    mapping = _as_measurement_map(payload)
-    if mapping is not None:
-        return mapping, location_history
 
+    candidates: List[Any] = [payload]
     if isinstance(payload, dict):
         for key in ("data", "readings", "result", "device"):
-            inner = payload.get(key)
-            mapping = _as_measurement_map(inner)
-            if mapping is not None:
-                return mapping, location_history or _find_location_history(inner)
-            if isinstance(inner, dict):
-                nested, nested_loc = extract_measurement_map(inner)
-                if nested:
-                    return nested, location_history or nested_loc
-        timeseries = _find_timeseries(payload)
+            if key in payload:
+                candidates.append(_coerce_json_container(payload.get(key)))
+
+    for candidate in candidates:
+        mapping = _as_measurement_map(candidate)
+        if mapping:
+            return mapping, location_history or _find_location_history(candidate)
+        mapping = _pandas_split_to_map(candidate)
+        if mapping:
+            return mapping, location_history
+        values = candidate if isinstance(candidate, list) else (
+            candidate.get("values") if isinstance(candidate, dict) else None
+        )
+        mapping = _values_list_to_map(values)
+        if mapping:
+            return mapping, location_history
+        timeseries = _find_timeseries(candidate)
         if timeseries:
-            return _timeseries_to_map(timeseries), location_history
+            return _timeseries_to_map(timeseries), location_history or _find_location_history(candidate)
+
     return {}, location_history
+
+
+def _coerce_json_container(value: Any) -> Any:
+    if isinstance(value, (bytes, bytearray)):
+        try:
+            value = value.decode("utf-8")
+        except UnicodeDecodeError:
+            return value
+    if isinstance(value, str):
+        text = value.strip()
+        if text[:1] in "{[":
+            try:
+                return json.loads(text)
+            except ValueError:
+                return value
+    return value
+
+
+def _pandas_split_to_map(obj: Any) -> Optional[Dict[str, Any]]:
+    """Convert a pandas ``orient=split`` table (ZENTRA output_format=df/json)."""
+    if not isinstance(obj, dict):
+        return None
+    columns = obj.get("columns")
+    rows = obj.get("data")
+    if not isinstance(columns, list) or not isinstance(rows, list) or not columns:
+        return None
+    if obj.get("readings") or obj.get("metadata"):
+        return None
+    lower = [str(col).strip().lower() for col in columns]
+
+    def _idx(*names: str) -> Optional[int]:
+        for name in names:
+            if name in lower:
+                return lower.index(name)
+        return None
+
+    ts_idx = _idx("timestamp_utc", "timestamp", "time")
+    dt_idx = _idx("datetime", "date")
+    mrid_idx = _idx("mrid", "reading_id")
+    skip = {i for i in (ts_idx, dt_idx, mrid_idx) if i is not None}
+    mapping: Dict[str, Any] = {}
+    for col_idx, col in enumerate(columns):
+        if col_idx in skip:
+            continue
+        readings = []
+        for row in rows:
+            if not isinstance(row, list) or col_idx >= len(row):
+                continue
+            cell = row[col_idx]
+            if isinstance(cell, dict) and ("value" in cell or "timestamp_utc" in cell):
+                readings.append(cell)
+                continue
+            reading: Dict[str, Any] = {"value": cell}
+            if ts_idx is not None and ts_idx < len(row):
+                reading["timestamp_utc"] = row[ts_idx]
+            if dt_idx is not None and dt_idx < len(row):
+                reading["datetime"] = row[dt_idx]
+            if mrid_idx is not None and mrid_idx < len(row):
+                reading["mrid"] = row[mrid_idx]
+            readings.append(reading)
+        if readings:
+            mapping[str(col)] = [{"metadata": {}, "readings": readings}]
+    return mapping or None
+
+
+def _values_list_to_map(values: Any) -> Optional[Dict[str, Any]]:
+    """Convert v5-style long rows: ``{measurement, value, timestamp, ...}``."""
+    if not isinstance(values, list) or not values or not isinstance(values[0], dict):
+        return None
+    sample = values[0]
+    if "measurement" not in sample and "measurement_name" not in sample:
+        return None
+    mapping: Dict[str, Any] = {}
+    for item in values:
+        if not isinstance(item, dict):
+            continue
+        name = item.get("measurement") or item.get("measurement_name")
+        if not name:
+            continue
+        metadata = {
+            "device_sn": item.get("device_sn") or item.get("device_id"),
+            "device_name": item.get("device_name"),
+            "sensor_name": item.get("sensor_name"),
+            "sensor_sn": item.get("sensor_sn"),
+            "port_number": item.get("port_num") if item.get("port_num") is not None else item.get("port_number"),
+            "units": item.get("unit") or item.get("units"),
+        }
+        error_code = item.get("error_code")
+        reading = {
+            "timestamp_utc": item.get("timestamp_utc", item.get("timestamp")),
+            "datetime": item.get("datetime"),
+            "value": item.get("value"),
+            "mrid": item.get("mrid", item.get("reading_id")),
+            "error_flag": bool(error_code) if error_code not in (None, 0, "0") else bool(item.get("error_flag")),
+            "error_description": item.get("error_description"),
+        }
+        mapping.setdefault(str(name), []).append({"metadata": metadata, "readings": [reading]})
+    return mapping or None
 
 
 def count_readings(measurement_map: Dict[str, Any]) -> int:
