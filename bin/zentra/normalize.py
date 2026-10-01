@@ -27,9 +27,22 @@ MEASUREMENT_ALIASES = {
     "wind gust": "gust_speed",
     "gust wind speed": "gust_speed",
     "precipitation": "precipitation",
+    "precip": "precipitation",
     "rain": "precipitation",
     "rainfall": "precipitation",
+    "precipitation mm": "precipitation",
+    "precipitation in": "precipitation",
+    "precipitation accumulation": "precipitation",
+    "cumulative precipitation": "precipitation",
+    "accumulated precipitation": "precipitation",
+    "daily precipitation": "precipitation",
+    "hourly precipitation": "precipitation",
+    "daily rain": "precipitation",
+    "rain accumulation": "precipitation",
+    "curated precipitation": "precipitation",
+    "curated rain": "precipitation",
     "max precipitation rate": "max_precipitation_rate",
+    "precipitation rate": "max_precipitation_rate",
     "solar radiation": "solar_radiation",
     "lightning activity": "lightning_activity",
     "lightning strikes": "lightning_activity",
@@ -52,13 +65,26 @@ MEASUREMENT_ALIASES = {
 }
 
 SNAKE_RE = re.compile(r"[^a-z0-9]+")
+UNIT_SUFFIX_RE = re.compile(
+    r"\s+\(?((mm|cm|in|inch|inches|mm/h|in/h|mm/hr|in/hr))\)?\s*$"
+)
 
 
 def canonical_measurement_name(name: str) -> str:
-    cleaned = (name or "").strip().lower()
+    cleaned = _clean_measurement_name(name)
     if cleaned in MEASUREMENT_ALIASES:
         return MEASUREMENT_ALIASES[cleaned]
+    # ZENTRA sometimes labels rain as "Precipitation (mm)" or "Daily Rainfall".
+    if re.search(r"precip|rainfall|(^| )rain( |$)", cleaned) and "rate" not in cleaned:
+        return "precipitation"
     return SNAKE_RE.sub("_", cleaned).strip("_") or "unknown_measurement"
+
+
+def _clean_measurement_name(name: str) -> str:
+    cleaned = (name or "").strip().lower()
+    cleaned = re.sub(r"\([^)]*\)", " ", cleaned)
+    cleaned = UNIT_SUFFIX_RE.sub("", cleaned)
+    return re.sub(r"\s+", " ", cleaned).strip()
 
 
 def location_at(

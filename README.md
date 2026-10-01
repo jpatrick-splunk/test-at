@@ -46,11 +46,13 @@ Set it in one of these ways (first match wins):
 | --- | --- | --- |
 | `device_sns` | `z6-30302` | Comma-separated, **maximum three** loggers |
 | `api_base_url` | `https://zentracloud.com` | Use `https://zentracloud.eu` for the EU server. HTTPS is required. |
-| `lookback_hours` | `24` | Used only before a per-logger checkpoint exists |
+| `lookback_hours` | `168` | Hours of history requested on the first poll before a checkpoint exists. Default 7 days so recent rain is not missed. |
 | `per_page` | `2000` | ZENTRA maximum |
 | `interval` | `300` | Seconds. ZENTRA allows one call per device per minute. |
 
 After the first successful poll the input checkpoints the highest measurement record ID (`mrid`) under `$SPLUNK_HOME/var/lib/splunk/modinputs/zentra_weather/` and requests `start_mrid` on later runs.
+
+To backfill a day the first poll missed (for example rain on 29 September when lookback was only 24 hours): set **Initial lookback hours** to at least `168`, delete the logger checkpoint file(s) in that `modinputs/zentra_weather/` directory, and wait for the next interval (or disable/enable the input). Dashboards default to the last 7 days.
 
 ## Search and dashboards
 

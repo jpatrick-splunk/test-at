@@ -5,7 +5,8 @@
   <search id="logger_base">
     <query>| datamodel Weather Weather search
 | search Weather.device_sn=$device_sn$
-| rename "Weather.*" as *</query>
+| rename "Weather.*" as *
+| eval precipitation = coalesce(precipitation, rainfall, rain, precipitation_mm, cumulative_precipitation, daily_precipitation, hourly_precipitation)</query>
     <earliest>$time.earliest$</earliest>
     <latest>$time.latest$</latest>
   </search>
@@ -13,7 +14,7 @@
     <input type="time" token="time" searchWhenChanged="true">
       <label>Time range</label>
       <default>
-        <earliest>-24h@h</earliest>
+        <earliest>-7d@d</earliest>
         <latest>now</latest>
       </default>
     </input>

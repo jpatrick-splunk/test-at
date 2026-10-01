@@ -16,7 +16,7 @@ api_base_url = <value>
 
 lookback_hours = <value>
 * Hours of history requested on the first poll for a logger.
-* Default: 24
+* Default: 168 (7 days). Increase and clear the logger checkpoint to backfill.
 
 per_page = <value>
 * Readings per API page. Maximum 2000.

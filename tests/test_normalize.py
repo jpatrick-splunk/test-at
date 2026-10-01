@@ -21,6 +21,12 @@ class CanonicalNameTests(unittest.TestCase):
         self.assertEqual(canonical_measurement_name("Air Temperature"), "air_temperature")
         self.assertEqual(canonical_measurement_name("Wind Gust"), "gust_speed")
         self.assertEqual(canonical_measurement_name("Signal Strength"), "signal_percent")
+        self.assertEqual(canonical_measurement_name("Precipitation"), "precipitation")
+        self.assertEqual(canonical_measurement_name("Precipitation (mm)"), "precipitation")
+        self.assertEqual(canonical_measurement_name("Precipitation mm"), "precipitation")
+        self.assertEqual(canonical_measurement_name("Daily Rainfall"), "precipitation")
+        self.assertEqual(canonical_measurement_name("Cumulative Precipitation"), "precipitation")
+        self.assertEqual(canonical_measurement_name("Max Precipitation Rate"), "max_precipitation_rate")
 
     def test_unknown_snake_case(self):
         self.assertEqual(canonical_measurement_name("Soil Dielectric"), "soil_dielectric")

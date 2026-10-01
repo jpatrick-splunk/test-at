@@ -51,7 +51,7 @@ SCHEME = """<scheme>
             </arg>
             <arg name="lookback_hours">
                 <title>Initial lookback hours</title>
-                <description>Hours of history to request on the first poll before a checkpoint exists. Default 24.</description>
+                <description>Hours of history to request on the first poll before a checkpoint exists. Default 168 (7 days).</description>
                 <required_on_create>false</required_on_create>
                 <required_on_edit>false</required_on_edit>
             </arg>

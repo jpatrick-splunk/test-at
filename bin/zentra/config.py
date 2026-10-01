@@ -191,7 +191,7 @@ def stanza_settings(stanza: InputStanza) -> dict:
         ),
         "device_sns": stanza_devices(stanza),
         "lookback_hours": parse_positive_int(
-            stanza.params.get("lookback_hours"), 24, "lookback_hours", maximum=24 * 30
+            stanza.params.get("lookback_hours"), 168, "lookback_hours", maximum=24 * 30
         ),
         "per_page": parse_positive_int(
             stanza.params.get("per_page"), 2000, "per_page", maximum=2000
