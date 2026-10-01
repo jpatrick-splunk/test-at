@@ -9,7 +9,7 @@ from pathlib import Path
 from unittest.mock import patch
 
 ROOT = Path(__file__).resolve().parents[1]
-sys.path.insert(0, str(ROOT / "zentra_weather" / "bin"))
+sys.path.insert(0, str(ROOT / "bin"))
 
 import zentra_weather as mi  # noqa: E402
 from zentra.config import ConfigError  # noqa: E402
@@ -123,7 +123,7 @@ class StreamTests(unittest.TestCase):
 
 class AppPackagingTests(unittest.TestCase):
     def test_required_files_exist(self):
-        app = ROOT / "zentra_weather"
+        app = ROOT
         required = [
             app / "default" / "app.conf",
             app / "default" / "inputs.conf",
@@ -142,7 +142,7 @@ class AppPackagingTests(unittest.TestCase):
             self.assertTrue(path.is_file(), msg="missing %s" % path)
 
     def test_weather_model_and_dashboards_parse(self):
-        app = ROOT / "zentra_weather"
+        app = ROOT
         model = json.loads((app / "default" / "data" / "models" / "Weather.json").read_text())
         self.assertEqual(model["modelName"], "Weather")
         self.assertEqual(model["objects"][0]["parentName"], "BaseEvent")
@@ -154,7 +154,7 @@ class AppPackagingTests(unittest.TestCase):
         ET.parse(app / "default" / "data" / "ui" / "nav" / "default.xml")
 
     def test_default_inputs_have_no_token(self):
-        text = (ROOT / "zentra_weather" / "default" / "inputs.conf").read_text()
+        text = (ROOT / "default" / "inputs.conf").read_text()
         self.assertIn("device_sns = z6-30302", text)
         self.assertNotRegex(text, r"(?i)^api_token\s*=\s*\S+", "token must not be hardcoded")
 

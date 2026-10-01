@@ -4,7 +4,7 @@ import unittest
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
-sys.path.insert(0, str(ROOT / "zentra_weather" / "bin"))
+sys.path.insert(0, str(ROOT / "bin"))
 
 from zentra.client import extract_measurement_map  # noqa: E402
 from zentra.normalize import (  # noqa: E402

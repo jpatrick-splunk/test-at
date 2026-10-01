@@ -5,7 +5,7 @@ import unittest
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
-sys.path.insert(0, str(ROOT / "zentra_weather" / "bin"))
+sys.path.insert(0, str(ROOT / "bin"))
 
 from zentra.checkpoint import load_checkpoint, save_checkpoint  # noqa: E402
 from zentra.config import (  # noqa: E402

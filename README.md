@@ -2,7 +2,7 @@
 
 Splunk app that polls **ZENTRA Cloud v4** for up to three field loggers (default `z6-30302`), indexes one normalized weather event per observation timestamp, and ships a custom **Weather** data model plus Simple XML dashboards.
 
-The app directory is `zentra_weather/`. Copy it to `$SPLUNK_HOME/etc/apps/zentra_weather`.
+This repository **is** the Splunk app. Splunk loads apps from `$SPLUNK_HOME/etc/apps/<app_id>/` and looks for `default/app.conf` at that root. The folder name should be `zentra_weather` so it matches `[package] id` in `default/app.conf`.
 
 ## What you get
 
@@ -18,7 +18,7 @@ Each indexed event is JSON with CIM-style weather fields (`air_temperature`, `re
 
 ## Install
 
-1. Copy `zentra_weather` into `$SPLUNK_HOME/etc/apps/` on a Splunk 10.x search head (and heavy forwarder if that is where you want the poller to run).
+1. Place this repository at `$SPLUNK_HOME/etc/apps/zentra_weather` (clone, copy, or symlink). Do not nest it one directory deeper — Splunk will not see `default/app.conf`.
 2. Confirm a `weather` index exists, or keep the app's `indexes.conf` on the indexer tier.
 3. Restart Splunk.
 

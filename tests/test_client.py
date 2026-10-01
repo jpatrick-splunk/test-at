@@ -6,7 +6,7 @@ from urllib.error import HTTPError
 from io import BytesIO
 
 ROOT = Path(__file__).resolve().parents[1]
-sys.path.insert(0, str(ROOT / "zentra_weather" / "bin"))
+sys.path.insert(0, str(ROOT / "bin"))
 
 from zentra.client import (  # noqa: E402
     authorization_header,
