@@ -14,7 +14,7 @@ This repository **is** the Splunk app. Splunk loads apps from `$SPLUNK_HOME/etc/
 | Dashboards | Weather Overview, Logger Detail, Data Quality |
 | Optional `weather` index | `default/indexes.conf` |
 
-Each indexed event is JSON with CIM-style weather fields (`air_temperature`, `relative_humidity`, `wind_speed`, `precipitation`, `solar_radiation`, location, `error_flag`, and so on) rather than ZENTRA's measurement-keyed arrays.
+Each indexed event is JSON with CIM-style weather fields (`air_temperature`, `relative_humidity`, `wind_speed`, `precipitation`, `solar_radiation`, location, `error_flag`, and so on) rather than ZENTRA's measurement-keyed arrays. ZL6 / ATMOS loggers typically record a measurement every **15 minutes**; dashboards chart at that span and the modular input polls every 900 seconds.
 
 ## Install
 
@@ -48,7 +48,7 @@ Set it in one of these ways (first match wins):
 | `api_base_url` | `https://zentracloud.com` | Use `https://zentracloud.eu` for the EU server. HTTPS is required. |
 | `lookback_hours` | `168` | Hours of history requested on the first poll before a checkpoint exists. Default 7 days so recent rain is not missed. |
 | `per_page` | `2000` | ZENTRA maximum |
-| `interval` | `300` | Seconds. ZENTRA allows one call per device per minute. |
+| `interval` | `900` | Seconds. Matches the typical 15-minute logger measurement interval. ZENTRA allows one API call per device per minute. |
 
 After the first successful poll the input checkpoints the highest measurement record ID (`mrid`) under `$SPLUNK_HOME/var/lib/splunk/modinputs/zentra_weather/` and requests `start_mrid` on later runs.
 

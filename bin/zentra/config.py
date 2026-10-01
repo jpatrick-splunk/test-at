@@ -39,7 +39,7 @@ class InputStanza:
     @property
     def interval(self) -> int:
         try:
-            return int(self.params.get("interval", "300"))
+            return int(self.params.get("interval", "900"))
         except ValueError as exc:
             raise ConfigError("interval must be an integer number of seconds") from exc
 

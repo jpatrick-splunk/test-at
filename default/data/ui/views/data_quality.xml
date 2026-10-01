@@ -63,7 +63,7 @@
 | rename "Weather.*" as *
 | stats latest(_time) as last_seen max(mrid) as last_mrid count as observations sum(eval(if(error_flag=true OR error_flag="true" OR error_flag=1,1,0))) as error_events by device_sn device_name
 | eval age_seconds = now() - last_seen
-| eval stale = if(age_seconds &gt; 3600, "stale", "ok")
+| eval stale = if(age_seconds &gt; 1800, "stale", "ok")
 | convert ctime(last_seen)
 | sort stale, device_sn</query>
           <earliest>$time.earliest$</earliest>
@@ -80,7 +80,7 @@
           <query>| datamodel Weather Weather search
 | rename "Weather.*" as *
 | eval is_error = if(error_flag=true OR error_flag="true" OR error_flag=1, 1, 0)
-| timechart span=1h sum(is_error) as error_events count as observations by device_sn</query>
+| timechart span=15m sum(is_error) as error_events count as observations by device_sn</query>
           <earliest>$time.earliest$</earliest>
           <latest>$time.latest$</latest>
         </search>
@@ -112,7 +112,7 @@
         <search>
           <query>| datamodel Weather Weather search
 | rename "Weather.*" as *
-| timechart span=1h count by device_sn</query>
+| timechart span=15m count by device_sn</query>
           <earliest>$time.earliest$</earliest>
           <latest>$time.latest$</latest>
         </search>

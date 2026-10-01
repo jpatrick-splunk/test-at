@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <dashboard version="1.1">
   <label>Weather Overview</label>
-  <description>Normalized ZENTRA Cloud v4 field logger observations from the Weather data model.</description>
+  <description>Normalized ZENTRA Cloud v4 field logger observations from the Weather data model. Charts use 15-minute spans to match logger measurement intervals.</description>
   <search id="base_weather">
     <query>| datamodel Weather Weather search
 | search Weather.device_sn=$device_sn$
@@ -116,9 +116,9 @@
     </panel>
     <panel>
       <chart>
-        <title>Precipitation</title>
+        <title>Precipitation (15-minute totals)</title>
         <search base="base_weather">
-          <query>| timechart span=1h sum(precipitation) as precipitation by device_sn</query>
+          <query>| timechart span=15m sum(precipitation) as precipitation by device_sn</query>
         </search>
         <option name="charting.chart">column</option>
         <option name="charting.chart.stackMode">stacked</option>
