@@ -1,0 +1,123 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<dashboard version="1.1">
+  <label>Data Quality</label>
+  <description>Polling freshness, sensor errors, and coverage for ZENTRA Cloud weather events.</description>
+  <fieldset submitButton="false" autoRun="true">
+    <input type="time" token="time" searchWhenChanged="true">
+      <label>Time range</label>
+      <default>
+        <earliest>-7d@d</earliest>
+        <latest>now</latest>
+      </default>
+    </input>
+  </fieldset>
+  <row>
+    <panel>
+      <single>
+        <title>Indexed observations</title>
+        <search>
+          <query>| datamodel Weather Weather search
+| rename "Weather.*" as *
+| stats count</query>
+          <earliest>$time.earliest$</earliest>
+          <latest>$time.latest$</latest>
+        </search>
+      </single>
+    </panel>
+    <panel>
+      <single>
+        <title>Loggers seen</title>
+        <search>
+          <query>| datamodel Weather Weather search
+| rename "Weather.*" as *
+| stats dc(device_sn) as value</query>
+          <earliest>$time.earliest$</earliest>
+          <latest>$time.latest$</latest>
+        </search>
+      </single>
+    </panel>
+    <panel>
+      <single>
+        <title>Observations with errors</title>
+        <search>
+          <query>| datamodel Weather Weather search
+| rename "Weather.*" as *
+| where error_flag=true OR error_flag="true" OR error_flag=1
+| stats count as value</query>
+          <earliest>$time.earliest$</earliest>
+          <latest>$time.latest$</latest>
+        </search>
+        <option name="colorMode">block</option>
+        <option name="useColors">1</option>
+        <option name="rangeValues">[0,1,10]</option>
+        <option name="rangeColors">["0x1e7c46","0xf4b63f","0xd41e1e"]</option>
+      </single>
+    </panel>
+  </row>
+  <row>
+    <panel>
+      <table>
+        <title>Logger freshness</title>
+        <search>
+          <query>| datamodel Weather Weather search
+| rename "Weather.*" as *
+| stats latest(_time) as last_seen max(mrid) as last_mrid count as observations sum(eval(if(error_flag=true OR error_flag="true" OR error_flag=1,1,0))) as error_events by device_sn device_name
+| eval age_seconds = now() - last_seen
+| eval stale = if(age_seconds &gt; 1800, "stale", "ok")
+| convert ctime(last_seen)
+| sort stale, device_sn</query>
+          <earliest>$time.earliest$</earliest>
+          <latest>$time.latest$</latest>
+        </search>
+        <option name="count">20</option>
+        <option name="drilldown">none</option>
+      </table>
+    </panel>
+    <panel>
+      <chart>
+        <title>Error flags over time</title>
+        <search>
+          <query>| datamodel Weather Weather search
+| rename "Weather.*" as *
+| eval is_error = if(error_flag=true OR error_flag="true" OR error_flag=1, 1, 0)
+| timechart span=15m sum(is_error) as error_events count as observations by device_sn</query>
+          <earliest>$time.earliest$</earliest>
+          <latest>$time.latest$</latest>
+        </search>
+        <option name="charting.chart">column</option>
+        <option name="charting.chart.stackMode">stacked</option>
+      </chart>
+    </panel>
+  </row>
+  <row>
+    <panel>
+      <table>
+        <title>Sensor error details</title>
+        <search>
+          <query>| datamodel Weather Weather search
+| rename "Weather.*" as *
+| where error_flag=true OR error_flag="true" OR error_flag=1 OR isnotnull(metadata_errors)
+| table _time, device_sn, sensor_name, error_flag, error_description, metadata_errors, air_temperature, wind_speed
+| sort - _time</query>
+          <earliest>$time.earliest$</earliest>
+          <latest>$time.latest$</latest>
+        </search>
+        <option name="count">20</option>
+        <option name="drilldown">none</option>
+      </table>
+    </panel>
+    <panel>
+      <chart>
+        <title>Observation volume</title>
+        <search>
+          <query>| datamodel Weather Weather search
+| rename "Weather.*" as *
+| timechart span=15m count by device_sn</query>
+          <earliest>$time.earliest$</earliest>
+          <latest>$time.latest$</latest>
+        </search>
+        <option name="charting.chart">line</option>
+      </chart>
+    </panel>
+  </row>
+</dashboard>

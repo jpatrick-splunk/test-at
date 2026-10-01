@@ -1,0 +1,158 @@
+{
+  "Air Temperature": [
+    {
+      "metadata": {
+        "device_sn": "z6-30302",
+        "device_name": "North Field",
+        "port_number": 1,
+        "sensor_sn": "AT-56789",
+        "sensor_name": "ATMOS 41",
+        "units": "°C",
+        "errors": []
+      },
+      "readings": [
+        {
+          "timestamp_utc": 1720000000,
+          "datetime": "2024-07-03 12:06:40-06:00",
+          "tz_offset": -21600,
+          "value": 24.7,
+          "precision": 1,
+          "mrid": 100,
+          "error_flag": false,
+          "error_description": null
+        },
+        {
+          "timestamp_utc": 1720000900,
+          "datetime": "2024-07-03 12:21:40-06:00",
+          "tz_offset": -21600,
+          "value": 25.1,
+          "precision": 1,
+          "mrid": 101,
+          "error_flag": false,
+          "error_description": null
+        }
+      ]
+    }
+  ],
+  "Relative Humidity": [
+    {
+      "metadata": {
+        "device_sn": "z6-30302",
+        "device_name": "North Field",
+        "port_number": 1,
+        "sensor_sn": "AT-56789",
+        "sensor_name": "ATMOS 41",
+        "units": "%",
+        "errors": []
+      },
+      "readings": [
+        {
+          "timestamp_utc": 1720000000,
+          "datetime": "2024-07-03 12:06:40-06:00",
+          "tz_offset": -21600,
+          "value": 41.2,
+          "precision": 1,
+          "mrid": 100,
+          "error_flag": false,
+          "error_description": null
+        },
+        {
+          "timestamp_utc": 1720000900,
+          "datetime": "2024-07-03 12:21:40-06:00",
+          "tz_offset": -21600,
+          "value": 40.8,
+          "precision": 1,
+          "mrid": 101,
+          "error_flag": false,
+          "error_description": null
+        }
+      ]
+    }
+  ],
+  "Wind Speed": [
+    {
+      "metadata": {
+        "device_sn": "z6-30302",
+        "port_number": 1,
+        "sensor_name": "ATMOS 41",
+        "units": "m/s",
+        "errors": ["ORIENTATION_ERROR"]
+      },
+      "readings": [
+        {
+          "timestamp_utc": 1720000000,
+          "datetime": "2024-07-03 12:06:40-06:00",
+          "tz_offset": -21600,
+          "value": null,
+          "precision": 2,
+          "mrid": 100,
+          "error_flag": true,
+          "error_description": "Sensor is reporting an error"
+        },
+        {
+          "timestamp_utc": 1720000900,
+          "datetime": "2024-07-03 12:21:40-06:00",
+          "tz_offset": -21600,
+          "value": 2.4,
+          "precision": 2,
+          "mrid": 101,
+          "error_flag": false,
+          "error_description": null
+        }
+      ]
+    }
+  ],
+  "Precipitation": [
+    {
+      "metadata": {
+        "device_sn": "z6-30302",
+        "units": "mm",
+        "errors": []
+      },
+      "readings": [
+        {
+          "timestamp_utc": 1720000000,
+          "value": 0.2,
+          "mrid": 100,
+          "error_flag": false
+        },
+        {
+          "timestamp_utc": 1720000900,
+          "value": 0.0,
+          "mrid": 101,
+          "error_flag": false
+        }
+      ]
+    }
+  ],
+  "Solar Radiation": [
+    {
+      "metadata": {
+        "device_sn": "z6-30302",
+        "units": "W/m²",
+        "errors": []
+      },
+      "readings": [
+        {
+          "timestamp_utc": 1720000000,
+          "value": 640.0,
+          "mrid": 100,
+          "error_flag": false
+        }
+      ]
+    }
+  ],
+  "location_history": [
+    {
+      "Latitude": 46.7525833,
+      "Longitude": -117.1819223,
+      "Altitude": 774.0,
+      "datetime": "2024-07-03 12:00:00+00:00"
+    }
+  ],
+  "pagination": {
+    "page_num": 1,
+    "per_page": 2000,
+    "next_page": null
+  }
+}

@@ -1,0 +1,142 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<dashboard version="1.1">
+  <label>Logger Detail</label>
+  <description>Per-logger weather from the Weather data model. Select a serial such as z6-30302.</description>
+  <search id="logger_base">
+    <query>| datamodel Weather Weather search
+| search Weather.device_sn=$device_sn$
+| rename "Weather.*" as *
+| eval precipitation = coalesce(precipitation, rainfall, rain, precipitation_mm, cumulative_precipitation, daily_precipitation, hourly_precipitation)</query>
+    <earliest>$time.earliest$</earliest>
+    <latest>$time.latest$</latest>
+  </search>
+  <fieldset submitButton="false" autoRun="true">
+    <input type="time" token="time" searchWhenChanged="true">
+      <label>Time range</label>
+      <default>
+        <earliest>-7d@d</earliest>
+        <latest>now</latest>
+      </default>
+    </input>
+    <input type="dropdown" token="device_sn" searchWhenChanged="true">
+      <label>Logger serial</label>
+      <choice value="z6-30302">z6-30302</choice>
+      <default>z6-30302</default>
+      <initialValue>z6-30302</initialValue>
+      <fieldForLabel>device_sn</fieldForLabel>
+      <fieldForValue>device_sn</fieldForValue>
+      <search>
+        <query>`zentra_weather_search` | stats count by device_sn | sort device_sn</query>
+        <earliest>-30d@d</earliest>
+        <latest>now</latest>
+      </search>
+    </input>
+  </fieldset>
+  <row>
+    <panel>
+      <single>
+        <title>Logger</title>
+        <search base="logger_base">
+          <query>| stats latest(device_name) as device_name latest(device_sn) as device_sn latest(sensor_name) as sensor_name
+| eval value = coalesce(device_name, device_sn)." / ".coalesce(sensor_name, "unknown sensor")
+| fields value</query>
+        </search>
+      </single>
+    </panel>
+    <panel>
+      <single>
+        <title>Last observation</title>
+        <search base="logger_base">
+          <query>| stats latest(_time) as last_seen | convert ctime(last_seen) | rename last_seen as value | fields value</query>
+        </search>
+      </single>
+    </panel>
+    <panel>
+      <single>
+        <title>Battery</title>
+        <search base="logger_base">
+          <query>| stats latest(battery_percent) as value</query>
+        </search>
+        <option name="unit">%</option>
+        <option name="rangeValues">[20,40,100]</option>
+        <option name="useColors">1</option>
+        <option name="rangeColors">["0xd41e1e","0xf4b63f","0x1e7c46"]</option>
+      </single>
+    </panel>
+    <panel>
+      <single>
+        <title>Signal</title>
+        <search base="logger_base">
+          <query>| stats latest(signal_percent) as value</query>
+        </search>
+        <option name="unit">%</option>
+        <option name="useColors">1</option>
+        <option name="rangeValues">[20,40,100]</option>
+        <option name="rangeColors">["0xd41e1e","0xf4b63f","0x1e7c46"]</option>
+      </single>
+    </panel>
+  </row>
+  <row>
+    <panel>
+      <chart>
+        <title>Temperature, dew point</title>
+        <search base="logger_base">
+          <query>| timechart span=15m avg(air_temperature) as air_temperature avg(dew_point) as dew_point</query>
+        </search>
+        <option name="charting.chart">line</option>
+      </chart>
+    </panel>
+    <panel>
+      <chart>
+        <title>Humidity and vapor pressure</title>
+        <search base="logger_base">
+          <query>| timechart span=15m avg(relative_humidity) as relative_humidity avg(vapor_pressure) as vapor_pressure</query>
+        </search>
+        <option name="charting.chart">line</option>
+      </chart>
+    </panel>
+  </row>
+  <row>
+    <panel>
+      <chart>
+        <title>Wind speed, gust, direction</title>
+        <search base="logger_base">
+          <query>| timechart span=15m avg(wind_speed) as wind_speed max(gust_speed) as gust_speed avg(wind_direction) as wind_direction</query>
+        </search>
+        <option name="charting.chart">line</option>
+      </chart>
+    </panel>
+    <panel>
+      <chart>
+        <title>Solar radiation and precipitation</title>
+        <search base="logger_base">
+          <query>| timechart span=15m avg(solar_radiation) as solar_radiation sum(precipitation) as precipitation</query>
+        </search>
+        <option name="charting.chart">area</option>
+      </chart>
+    </panel>
+  </row>
+  <row>
+    <panel>
+      <chart>
+        <title>Atmospheric pressure</title>
+        <search base="logger_base">
+          <query>| timechart span=15m avg(atmospheric_pressure) as atmospheric_pressure</query>
+        </search>
+        <option name="charting.chart">line</option>
+      </chart>
+    </panel>
+    <panel>
+      <table>
+        <title>Recent observations</title>
+        <search base="logger_base">
+          <query>| sort - _time
+| table _time, device_sn, air_temperature, relative_humidity, wind_speed, wind_direction, gust_speed, precipitation, solar_radiation, atmospheric_pressure, battery_percent, error_flag, error_description
+| head 100</query>
+        </search>
+        <option name="count">20</option>
+        <option name="drilldown">none</option>
+      </table>
+    </panel>
+  </row>
+</dashboard>

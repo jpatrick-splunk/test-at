@@ -1,0 +1,29 @@
+[]
+access = read : [ * ], write : [ admin ]
+export = system
+
+[datamodels]
+access = read : [ * ], write : [ admin ]
+export = system
+
+[views]
+access = read : [ * ], write : [ admin ]
+export = none
+
+[eventtypes]
+export = system
+
+[tags]
+export = system
+
+[macros]
+export = system
+
+[props]
+export = system
+
+[transforms]
+export = system
+
+[inputs]
+export = system

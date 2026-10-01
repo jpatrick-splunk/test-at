@@ -1,0 +1,52 @@
+{
+  "schemaVersion": "2.0.0",
+  "info": {
+    "title": "ZENTRA Weather",
+    "id": {
+      "group": null,
+      "name": "zentra_weather",
+      "version": "1.0.0"
+    },
+    "author": [
+      {
+        "name": "ZENTRA Weather Maintainers",
+        "email": null,
+        "company": null
+      }
+    ],
+    "releaseDate": null,
+    "description": "Polls ZENTRA Cloud v4 for up to three field loggers, indexes normalized weather events, and provides a Weather data model with Simple XML dashboards.",
+    "classification": {
+      "intendedAudience": "IT and environmental operations",
+      "categories": ["IoT", "IT Operations"],
+      "developmentStatus": "Production/Stable"
+    },
+    "commonInformationModels": null,
+    "license": {
+      "name": "Apache-2.0",
+      "text": null,
+      "uri": "https://www.apache.org/licenses/LICENSE-2.0"
+    },
+    "privacyPolicy": {
+      "name": null,
+      "text": null,
+      "uri": null
+    },
+    "releaseNotes": {
+      "name": "README",
+      "text": "./README.md",
+      "uri": null
+    }
+  },
+  "dependencies": null,
+  "tasks": null,
+  "inputGroups": null,
+  "incompatibleApps": null,
+  "platformRequirements": {
+    "splunk": {
+      "Enterprise": ">=10.0.0"
+    }
+  },
+  "supportedDeployments": ["_standalone", "_distributed"],
+  "targetWorkloads": ["_search_heads", "_indexers", "_forwarders"]
+}
