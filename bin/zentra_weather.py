@@ -20,12 +20,12 @@ from zentra.config import (
     parse_input_xml,
     stanza_settings,
 )
-from zentra.normalize import normalize_readings
+from zentra.normalize import flatten_readings
 from zentra.stream import end_stream, start_stream, write_event
 
 SCHEME = """<scheme>
     <title>ZENTRA Cloud Weather</title>
-    <description>Poll ZENTRA Cloud v4 for up to three field loggers and index normalized weather events.</description>
+    <description>Poll ZENTRA Cloud v4 for up to three field loggers and index 15-minute readings so daily and weekly rainfall can be totaled in Splunk.</description>
     <use_external_validation>true</use_external_validation>
     <use_single_instance>true</use_single_instance>
     <streaming_mode>xml</streaming_mode>
@@ -51,7 +51,7 @@ SCHEME = """<scheme>
             </arg>
             <arg name="lookback_hours">
                 <title>Initial lookback hours</title>
-                <description>Hours of history to request on the first poll before a checkpoint exists. Default 168 (7 days).</description>
+                <description>Hours of history to request on the first poll before a checkpoint exists. Default 336 (14 days).</description>
                 <required_on_create>false</required_on_create>
                 <required_on_edit>false</required_on_edit>
             </arg>
@@ -103,7 +103,7 @@ def run(xml_text: Optional[str] = None) -> int:
             event_count += _run_stanza(stanza, cfg.checkpoint_dir)
     finally:
         end_stream()
-    log("indexed %d weather events" % event_count)
+    log("indexed %d reading events" % event_count)
     return 0
 
 
@@ -132,7 +132,7 @@ def _run_stanza(stanza, checkpoint_dir: str) -> int:
 
 
 def _poll_device(stanza_name: str, device_sn: str, settings: dict, checkpoint_dir: str) -> int:
-    ckpt = load_checkpoint(checkpoint_dir, device_sn)
+    ckpt = load_checkpoint(checkpoint_dir, device_sn, namespace=stanza_name)
     last_mrid = ckpt.get("last_mrid")
     start_mrid = int(last_mrid) + 1 if last_mrid is not None else None
     start_date = end_date = None
@@ -170,7 +170,7 @@ def _poll_device(stanza_name: str, device_sn: str, settings: dict, checkpoint_di
                     "no measurements parsed for %s; top-level keys=%s data_type=%s"
                     % (device_sn, keys, type(data_obj).__name__)
                 )
-            events = normalize_readings(
+            events = flatten_readings(
                 measurement_map,
                 location_history=location_history,
                 device_sn_fallback=device_sn,
@@ -202,6 +202,7 @@ def _poll_device(stanza_name: str, device_sn: str, settings: dict, checkpoint_di
             device_sn,
             last_mrid=int(max_mrid) if max_mrid is not None else None,
             last_timestamp_utc=int(max_ts) if max_ts is not None else None,
+            namespace=stanza_name,
         )
     log("device %s emitted %d events" % (device_sn, emitted))
     return emitted

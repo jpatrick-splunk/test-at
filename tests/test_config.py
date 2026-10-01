@@ -121,6 +121,15 @@ class CheckpointTests(unittest.TestCase):
             self.assertEqual(data["last_mrid"], 10)
             self.assertEqual(data["last_timestamp_utc"], 200)
 
+    def test_namespace_is_isolated(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            save_checkpoint(tmp, "z6-30302", last_mrid=1, namespace="zentra_weather://field_loggers")
+            save_checkpoint(tmp, "z6-30302", last_mrid=50, namespace="zentra_weather://validate")
+            old = load_checkpoint(tmp, "z6-30302", namespace="zentra_weather://field_loggers")
+            fresh = load_checkpoint(tmp, "z6-30302", namespace="zentra_weather://validate")
+            self.assertEqual(old["last_mrid"], 1)
+            self.assertEqual(fresh["last_mrid"], 50)
+
 
 if __name__ == "__main__":
     unittest.main()

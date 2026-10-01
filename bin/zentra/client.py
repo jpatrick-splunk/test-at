@@ -13,7 +13,7 @@ from typing import Any, Callable, Dict, Iterator, List, Optional, Tuple
 from zentra import DEFAULT_API_BASE_URL
 
 READINGS_PATH = "/api/v4/get_readings/"
-USER_AGENT = "zentra_weather/1.0 (Splunk modular input)"
+USER_AGENT = "zentra_weather/1.1 (Splunk modular input)"
 DEFAULT_TIMEOUT = 60
 DEVICE_CALL_GAP_SECONDS = 61
 MAX_PAGES = 24

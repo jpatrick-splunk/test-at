@@ -21,8 +21,9 @@ RUN_XML_TEMPLATE = """<?xml version="1.0" encoding="utf-8"?>
 <input>
   <checkpoint_dir>{checkpoint_dir}</checkpoint_dir>
   <configuration>
-    <stanza name="zentra_weather://field_loggers">
-      <param name="index">weather</param>
+    <stanza name="zentra_weather://validate">
+      <param name="index">zentra_validate</param>
+      <param name="sourcetype">zentra:reading</param>
       <param name="device_sns">{devices}</param>
       <param name="api_token">test-token</param>
       <param name="api_base_url">https://zentracloud.com</param>
@@ -65,7 +66,7 @@ class ValidationTests(unittest.TestCase):
 
 
 class RunTests(unittest.TestCase):
-    def test_indexes_normalized_events(self):
+    def test_indexes_interval_readings(self):
         with tempfile.TemporaryDirectory() as tmp:
             xml = RUN_XML_TEMPLATE.format(checkpoint_dir=tmp, devices="z6-30302")
             stdout = io.StringIO()
@@ -76,19 +77,30 @@ class RunTests(unittest.TestCase):
             ) as write_event, patch("sys.stdout", stdout):
                 rc = mi.run(xml)
             self.assertEqual(rc, 0)
-            self.assertEqual(write_event.call_count, 2)
+            self.assertEqual(write_event.call_count, 9)
             first = write_event.call_args_list[0].kwargs.get("data") or write_event.call_args_list[0][0][0]
-            # write_event(data, stanza=..., ...)
             if not isinstance(first, dict):
                 first = write_event.call_args_list[0][0][0]
             self.assertEqual(first["device_sn"], "z6-30302")
-            self.assertIn("air_temperature", first)
-            ckpt = json.loads(Path(tmp, "z6-30302.json").read_text())
+            self.assertIn("measurement", first)
+            self.assertIn("value", first)
+            precip = [
+                (c.kwargs.get("data") or c[0][0])
+                for c in write_event.call_args_list
+                if (c.kwargs.get("data") or c[0][0]).get("measurement") == "Precipitation"
+            ]
+            self.assertEqual(len(precip), 2)
+            self.assertEqual(sum(e["value"] for e in precip), 0.2)
+            ckpt = json.loads(
+                Path(tmp, "zentra_weather_validate", "z6-30302.json").read_text()
+            )
             self.assertEqual(ckpt["last_mrid"], 101)
 
     def test_second_poll_skips_seen_mrids(self):
         with tempfile.TemporaryDirectory() as tmp:
-            Path(tmp, "z6-30302.json").write_text(
+            ckpt_dir = Path(tmp, "zentra_weather_validate")
+            ckpt_dir.mkdir()
+            (ckpt_dir / "z6-30302.json").write_text(
                 json.dumps({"last_mrid": 100, "device_sn": "z6-30302"}), encoding="utf-8"
             )
             xml = RUN_XML_TEMPLATE.format(checkpoint_dir=tmp, devices="z6-30302")
@@ -96,7 +108,7 @@ class RunTests(unittest.TestCase):
                 "zentra_weather.start_stream"
             ), patch("zentra_weather.end_stream"), patch("zentra_weather.write_event") as write_event:
                 mi.run(xml)
-            self.assertEqual(write_event.call_count, 1)
+            self.assertEqual(write_event.call_count, 4)
             kwargs = pages.call_args.kwargs
             self.assertEqual(kwargs["start_mrid"], 101)
 
@@ -109,14 +121,14 @@ class StreamTests(unittest.TestCase):
         write_event(
             {"timestamp_utc": 1, "device_sn": "z6-30302", "note": "<alert>"},
             stanza="zentra_weather://field_loggers",
-            sourcetype="zentra:weather",
-            index="weather",
+            sourcetype="zentra:reading",
+            index="zentra_validate",
             source="zentra_weather://z6-30302",
             out=buf,
         )
         tree = ET.fromstring(buf.getvalue())
-        self.assertEqual(tree.findtext("sourcetype"), "zentra:weather")
-        self.assertEqual(tree.findtext("index"), "weather")
+        self.assertEqual(tree.findtext("sourcetype"), "zentra:reading")
+        self.assertEqual(tree.findtext("index"), "zentra_validate")
         payload = json.loads(tree.findtext("data"))
         self.assertEqual(payload["note"], "<alert>")
 
@@ -131,6 +143,8 @@ class AppPackagingTests(unittest.TestCase):
             app / "default" / "datamodels.conf",
             app / "default" / "data" / "models" / "Weather.json",
             app / "default" / "data" / "ui" / "nav" / "default.xml",
+            app / "default" / "data" / "ui" / "views" / "rainfall_totals.xml",
+            app / "default" / "data" / "ui" / "views" / "reading_validation.xml",
             app / "default" / "data" / "ui" / "views" / "weather_overview.xml",
             app / "default" / "data" / "ui" / "views" / "logger_detail.xml",
             app / "default" / "data" / "ui" / "views" / "data_quality.xml",
@@ -149,13 +163,21 @@ class AppPackagingTests(unittest.TestCase):
         field_names = {f["fieldName"] for f in model["objects"][0]["fields"]}
         for name in ("device_sn", "air_temperature", "wind_speed", "precipitation", "error_flag"):
             self.assertIn(name, field_names)
-        for view in ("weather_overview.xml", "logger_detail.xml", "data_quality.xml"):
+        for view in (
+            "rainfall_totals.xml",
+            "reading_validation.xml",
+            "weather_overview.xml",
+            "logger_detail.xml",
+            "data_quality.xml",
+        ):
             ET.parse(app / "default" / "data" / "ui" / "views" / view)
         ET.parse(app / "default" / "data" / "ui" / "nav" / "default.xml")
 
     def test_default_inputs_have_no_token(self):
         text = (ROOT / "default" / "inputs.conf").read_text()
         self.assertIn("device_sns = z6-30302", text)
+        self.assertIn("index = zentra_validate", text)
+        self.assertIn("sourcetype = zentra:reading", text)
         self.assertNotRegex(text, r"(?i)^api_token\s*=\s*\S+", "token must not be hardcoded")
 
 

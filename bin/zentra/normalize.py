@@ -1,4 +1,4 @@
-"""Pivot ZENTRA Cloud v4 readings into one normalized weather event per timestamp."""
+"""Turn ZENTRA Cloud v4 readings into interval events and optional pivoted observations."""
 
 from __future__ import annotations
 
@@ -32,15 +32,6 @@ MEASUREMENT_ALIASES = {
     "rainfall": "precipitation",
     "precipitation mm": "precipitation",
     "precipitation in": "precipitation",
-    "precipitation accumulation": "precipitation",
-    "cumulative precipitation": "precipitation",
-    "accumulated precipitation": "precipitation",
-    "daily precipitation": "precipitation",
-    "hourly precipitation": "precipitation",
-    "daily rain": "precipitation",
-    "rain accumulation": "precipitation",
-    "curated precipitation": "precipitation",
-    "curated rain": "precipitation",
     "max precipitation rate": "max_precipitation_rate",
     "precipitation rate": "max_precipitation_rate",
     "solar radiation": "solar_radiation",
@@ -69,15 +60,44 @@ UNIT_SUFFIX_RE = re.compile(
     r"\s+\(?((mm|cm|in|inch|inches|mm/h|in/h|mm/hr|in/hr))\)?\s*$"
 )
 
+# ATMOS 41 Precipitation is rainfall during the measurement interval (typically
+# 15 minutes), not a running daily total. Sum those interval samples to get
+# daily/weekly accumulation. Do not fold daily/cumulative names into this set.
+SUM_CANONICAL = {
+    "precipitation",
+    "lightning_activity",
+    "lightning_strikes",
+    "precip_drops",
+    "precip_tips",
+    "precipitation_drop_counter",
+    "precipitation_tip_counter",
+}
+MAX_CANONICAL = {
+    "gust_speed",
+    "max_precipitation_rate",
+    "max_air_temperature",
+}
+MIN_CANONICAL = {
+    "min_air_temperature",
+}
+
 
 def canonical_measurement_name(name: str) -> str:
     cleaned = _clean_measurement_name(name)
     if cleaned in MEASUREMENT_ALIASES:
         return MEASUREMENT_ALIASES[cleaned]
-    # ZENTRA sometimes labels rain as "Precipitation (mm)" or "Daily Rainfall".
-    if re.search(r"precip|rainfall|(^| )rain( |$)", cleaned) and "rate" not in cleaned:
-        return "precipitation"
     return SNAKE_RE.sub("_", cleaned).strip("_") or "unknown_measurement"
+
+
+def aggregation_for(canonical: str) -> str:
+    """How to roll 15-minute samples up to a day or week."""
+    if canonical in SUM_CANONICAL:
+        return "sum"
+    if canonical in MAX_CANONICAL:
+        return "max"
+    if canonical in MIN_CANONICAL:
+        return "min"
+    return "avg"
 
 
 def _clean_measurement_name(name: str) -> str:
@@ -110,6 +130,82 @@ def location_at(
         else:
             break
     return chosen
+
+
+def flatten_readings(
+    measurement_map: Dict[str, Any],
+    location_history: Optional[List[Dict[str, Any]]] = None,
+    device_sn_fallback: Optional[str] = None,
+    min_mrid: Optional[int] = None,
+) -> List[Dict[str, Any]]:
+    """Emit one event per ZENTRA measurement reading (15-minute sample).
+
+    Keeps the original measurement name, value, and units so numbers can be
+    compared to ZENTRA Cloud before any dashboard aggregation.
+    """
+    events: List[Dict[str, Any]] = []
+    for measurement_name, entries in (measurement_map or {}).items():
+        original = str(measurement_name)
+        canonical = canonical_measurement_name(original)
+        if not isinstance(entries, list):
+            entries = [entries]
+        for entry in entries:
+            if not isinstance(entry, dict):
+                continue
+            metadata = entry.get("metadata") if isinstance(entry.get("metadata"), dict) else {}
+            units = (
+                metadata.get("units")
+                or metadata.get("unit")
+                or entry.get("units")
+                or entry.get("unit")
+            )
+            readings = entry.get("readings") or entry.get("values") or []
+            if not isinstance(readings, list):
+                continue
+            for reading in readings:
+                if not isinstance(reading, dict):
+                    continue
+                ts = _reading_timestamp(reading)
+                if ts is None:
+                    continue
+                mrid = _as_int(reading.get("mrid") or reading.get("reading_id"))
+                if min_mrid is not None and mrid is not None and mrid <= int(min_mrid):
+                    continue
+                event = {
+                    "vendor": "METER Group",
+                    "product": "ZENTRA Cloud",
+                    "vendor_product": "ZENTRA Cloud",
+                    "timestamp_utc": int(ts),
+                    "measurement": original,
+                    "measurement_canonical": canonical,
+                    "value": reading.get("value"),
+                    "aggregation": aggregation_for(canonical),
+                    "value_kind": "interval",
+                    "interval_seconds": 900,
+                    "error_flag": bool(reading.get("error_flag")),
+                }
+                _merge_identity(event, metadata, device_sn_fallback)
+                if units:
+                    event["units"] = str(units).strip()
+                if mrid is not None:
+                    event["mrid"] = mrid
+                if reading.get("datetime"):
+                    event["datetime"] = reading.get("datetime")
+                if reading.get("tz_offset") is not None:
+                    event["tz_offset"] = _as_int(reading.get("tz_offset"))
+                if reading.get("precision") is not None:
+                    event["precision"] = reading.get("precision")
+                if reading.get("error_description"):
+                    event["error_description"] = reading.get("error_description")
+                meta_errors = metadata.get("errors") or []
+                if isinstance(meta_errors, list) and meta_errors:
+                    event["metadata_errors"] = ",".join(str(x) for x in meta_errors)
+                event.update(location_at(location_history or [], ts))
+                events.append(event)
+    events.sort(
+        key=lambda item: (int(item.get("timestamp_utc") or 0), str(item.get("measurement") or ""))
+    )
+    return events
 
 
 def normalize_readings(

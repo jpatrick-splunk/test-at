@@ -1,7 +1,6 @@
 <nav search_view="search" color="#1B5E20">
-  <view name="weather_overview" default="true" />
-  <view name="logger_detail" />
-  <view name="data_quality" />
+  <view name="rainfall_totals" default="true" />
+  <view name="reading_validation" />
   <view name="search" />
   <view name="dashboards" />
 </nav>

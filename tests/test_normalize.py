@@ -8,7 +8,9 @@ sys.path.insert(0, str(ROOT / "bin"))
 
 from zentra.client import extract_measurement_map  # noqa: E402
 from zentra.normalize import (  # noqa: E402
+    aggregation_for,
     canonical_measurement_name,
+    flatten_readings,
     location_at,
     normalize_readings,
 )
@@ -24,9 +26,14 @@ class CanonicalNameTests(unittest.TestCase):
         self.assertEqual(canonical_measurement_name("Precipitation"), "precipitation")
         self.assertEqual(canonical_measurement_name("Precipitation (mm)"), "precipitation")
         self.assertEqual(canonical_measurement_name("Precipitation mm"), "precipitation")
-        self.assertEqual(canonical_measurement_name("Daily Rainfall"), "precipitation")
-        self.assertEqual(canonical_measurement_name("Cumulative Precipitation"), "precipitation")
+        self.assertEqual(canonical_measurement_name("Daily Rainfall"), "daily_rainfall")
+        self.assertEqual(canonical_measurement_name("Cumulative Precipitation"), "cumulative_precipitation")
         self.assertEqual(canonical_measurement_name("Max Precipitation Rate"), "max_precipitation_rate")
+
+    def test_interval_precip_sums_to_period_total(self):
+        self.assertEqual(aggregation_for("precipitation"), "sum")
+        self.assertEqual(aggregation_for("air_temperature"), "avg")
+        self.assertEqual(aggregation_for("gust_speed"), "max")
 
     def test_unknown_snake_case(self):
         self.assertEqual(canonical_measurement_name("Soil Dielectric"), "soil_dielectric")
@@ -69,6 +76,35 @@ class NormalizeTests(unittest.TestCase):
         self.assertFalse(second["error_flag"])
         self.assertEqual(second["precipitation"], 0.0)
         self.assertNotIn("solar_radiation", second)
+
+    def test_flattens_one_event_per_measurement_sample(self):
+        events = flatten_readings(
+            self.measurement_map,
+            location_history=self.location_history,
+            device_sn_fallback="z6-30302",
+        )
+        self.assertEqual(len(events), 9)
+        precip = [e for e in events if e["measurement"] == "Precipitation"]
+        self.assertEqual(len(precip), 2)
+        self.assertEqual(precip[0]["value"], 0.2)
+        self.assertEqual(precip[0]["units"], "mm")
+        self.assertEqual(precip[0]["aggregation"], "sum")
+        self.assertEqual(precip[0]["measurement_canonical"], "precipitation")
+        self.assertEqual(precip[1]["value"], 0.0)
+        daily_total = sum(e["value"] for e in precip)
+        self.assertAlmostEqual(daily_total, 0.2)
+        temp = [e for e in events if e["measurement"] == "Air Temperature"]
+        self.assertEqual(temp[0]["aggregation"], "avg")
+        self.assertEqual(temp[0]["value"], 24.7)
+
+    def test_flatten_skips_checkpointed_mrids(self):
+        events = flatten_readings(
+            self.measurement_map,
+            location_history=self.location_history,
+            min_mrid=100,
+        )
+        self.assertEqual(len(events), 4)
+        self.assertTrue(all(e["mrid"] == 101 for e in events))
 
     def test_skips_checkpointed_mrids(self):
         events = normalize_readings(
