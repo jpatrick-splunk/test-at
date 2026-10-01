@@ -1,0 +1,158 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<dashboard version="1.1">
+  <label>Weather Overview</label>
+  <description>Normalized ZENTRA Cloud v4 field logger observations from the Weather data model.</description>
+  <search id="base_weather">
+    <query>| datamodel Weather Weather search
+| search Weather.device_sn=$device_sn$
+| rename "Weather.*" as *</query>
+    <earliest>$time.earliest$</earliest>
+    <latest>$time.latest$</latest>
+  </search>
+  <fieldset submitButton="false" autoRun="true">
+    <input type="time" token="time" searchWhenChanged="true">
+      <label>Time range</label>
+      <default>
+        <earliest>-24h@h</earliest>
+        <latest>now</latest>
+      </default>
+    </input>
+    <input type="dropdown" token="device_sn" searchWhenChanged="true">
+      <label>Logger</label>
+      <choice value="*">All loggers</choice>
+      <default>*</default>
+      <initialValue>*</initialValue>
+      <fieldForLabel>device_sn</fieldForLabel>
+      <fieldForValue>device_sn</fieldForValue>
+      <search>
+        <query>`zentra_weather_search` | stats count by device_sn | sort device_sn</query>
+        <earliest>$time.earliest$</earliest>
+        <latest>$time.latest$</latest>
+      </search>
+    </input>
+  </fieldset>
+  <row>
+    <panel>
+      <single>
+        <title>Latest air temperature</title>
+        <search base="base_weather">
+          <query>| stats latest(air_temperature) as temp latest(air_temperature_unit) as unit
+| eval value = if(isnotnull(temp), temp." ".coalesce(unit,""), "n/a")
+| fields value</query>
+        </search>
+        <option name="underLabel">most recent observation</option>
+        <option name="colorMode">block</option>
+        <option name="useColors">0</option>
+      </single>
+    </panel>
+    <panel>
+      <single>
+        <title>Latest relative humidity</title>
+        <search base="base_weather">
+          <query>| stats latest(relative_humidity) as rh latest(relative_humidity_unit) as unit
+| eval value = if(isnotnull(rh), rh." ".coalesce(unit,""), "n/a")
+| fields value</query>
+        </search>
+        <option name="underLabel">most recent observation</option>
+      </single>
+    </panel>
+    <panel>
+      <single>
+        <title>Wind speed</title>
+        <search base="base_weather">
+          <query>| stats latest(wind_speed) as wind latest(wind_speed_unit) as unit
+| eval value = if(isnotnull(wind), wind." ".coalesce(unit,""), "n/a")
+| fields value</query>
+        </search>
+        <option name="underLabel">most recent observation</option>
+      </single>
+    </panel>
+    <panel>
+      <single>
+        <title>Precipitation (period sum)</title>
+        <search base="base_weather">
+          <query>| stats sum(precipitation) as precip latest(precipitation_unit) as unit
+| eval value = if(isnotnull(precip), round(precip, 2)." ".coalesce(unit,""), "n/a")
+| fields value</query>
+        </search>
+      </single>
+    </panel>
+  </row>
+  <row>
+    <panel>
+      <chart>
+        <title>Air temperature</title>
+        <search base="base_weather">
+          <query>| timechart span=15m avg(air_temperature) as air_temperature by device_sn</query>
+        </search>
+        <option name="charting.chart">line</option>
+        <option name="charting.axisTitleY.text">Temperature</option>
+        <option name="charting.legend.placement">bottom</option>
+      </chart>
+    </panel>
+    <panel>
+      <chart>
+        <title>Relative humidity</title>
+        <search base="base_weather">
+          <query>| timechart span=15m avg(relative_humidity) as relative_humidity by device_sn</query>
+        </search>
+        <option name="charting.chart">line</option>
+        <option name="charting.axisTitleY.text">Humidity</option>
+        <option name="charting.legend.placement">bottom</option>
+      </chart>
+    </panel>
+  </row>
+  <row>
+    <panel>
+      <chart>
+        <title>Wind speed and gusts</title>
+        <search base="base_weather">
+          <query>| timechart span=15m avg(wind_speed) as wind_speed max(gust_speed) as gust_speed</query>
+        </search>
+        <option name="charting.chart">line</option>
+        <option name="charting.axisTitleY.text">Speed</option>
+      </chart>
+    </panel>
+    <panel>
+      <chart>
+        <title>Precipitation</title>
+        <search base="base_weather">
+          <query>| timechart span=1h sum(precipitation) as precipitation by device_sn</query>
+        </search>
+        <option name="charting.chart">column</option>
+        <option name="charting.chart.stackMode">stacked</option>
+        <option name="charting.axisTitleY.text">Precipitation</option>
+      </chart>
+    </panel>
+  </row>
+  <row>
+    <panel>
+      <map>
+        <title>Logger locations</title>
+        <search base="base_weather">
+          <query>| stats latest(air_temperature) as air_temperature latest(latitude) as latitude latest(longitude) as longitude by device_sn
+| geostats latfield=latitude longfield=longitude latest(air_temperature) as air_temperature by device_sn</query>
+        </search>
+        <option name="mapping.type">marker</option>
+        <option name="mapping.map.zoom">4</option>
+      </map>
+    </panel>
+    <panel>
+      <table>
+        <title>Latest observation by logger</title>
+        <search base="base_weather">
+          <query>| stats latest(_time) as last_seen latest(air_temperature) as air_temperature latest(relative_humidity) as relative_humidity latest(wind_speed) as wind_speed latest(precipitation) as precipitation latest(solar_radiation) as solar_radiation latest(battery_percent) as battery_percent latest(error_flag) as error_flag by device_sn device_name
+| convert ctime(last_seen)
+| sort device_sn</query>
+        </search>
+        <option name="drilldown">row</option>
+        <option name="count">20</option>
+        <drilldown>
+          <link target="_blank">
+            <![CDATA[/app/zentra_weather/logger_detail?form.device_sn=$row.device_sn$&form.time.earliest=$time.earliest$&form.time.latest=$time.latest$]]>
+          </link>
+        </drilldown>
+      </table>
+    </panel>
+  </row>
+</dashboard>
