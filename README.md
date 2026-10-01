@@ -70,7 +70,7 @@ If dashboards are empty, run this in Search (All time):
 index=* (sourcetype=zentra:weather OR sourcetype=zentra_weather OR source=zentra_weather://*)
 ```
 
-Events should land in `main` by default. If the input still uses `index=weather`, either create that index or change the input to `main`. Check `$SPLUNK_HOME/var/log/splunk/splunkd.log` for `zentra_weather` lines such as `no measurements parsed`.
+Events should land in the `weather` index. Dashboards still search `index=weather OR index=main` so older events already in `main` remain visible. Check `$SPLUNK_HOME/var/log/splunk/splunkd.log` for `zentra_weather` lines such as `no measurements parsed`.
 
 ## TLS, secrets, and certificates
 
