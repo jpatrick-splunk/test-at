@@ -17,6 +17,7 @@ from zentra.client import (
 )
 from zentra.config import (
     ConfigError,
+    index_storage_exists,
     parse_input_xml,
     stanza_settings,
 )
@@ -129,6 +130,14 @@ def _run_stanza(stanza, checkpoint_dir: str) -> int:
             settings["sourcetype"],
         )
     )
+    storage = index_storage_exists(settings["index"])
+    if storage is False:
+        log(
+            "index '%s' does not exist on this instance. "
+            "Create it with: splunk add index %s  then restart. "
+            "Until then Splunk drops every event and zentra_validate stays empty."
+            % (settings["index"], settings["index"])
+        )
     for index, device_sn in enumerate(devices):
         if index:
             # One call per device per minute.

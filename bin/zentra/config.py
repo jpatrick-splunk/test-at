@@ -178,6 +178,34 @@ def _stanza_from_element(element: ET.Element, name: str) -> InputStanza:
     return InputStanza(name=name, params=params)
 
 
+def splunk_index_dir(index_name: str, environ: Optional[dict] = None) -> Optional[str]:
+    """Return the standalone db path for an index, or None if unknown."""
+    env = environ if environ is not None else os.environ
+    name = (index_name or "").strip()
+    if not name or name.startswith("_"):
+        return None
+    if not re.match(r"^[A-Za-z0-9][A-Za-z0-9_-]*$", name):
+        return None
+    splunk_db = (env.get("SPLUNK_DB") or "").strip()
+    if not splunk_db:
+        home = (env.get("SPLUNK_HOME") or "").strip()
+        if not home:
+            return None
+        splunk_db = os.path.join(home, "var", "lib", "splunk")
+    return os.path.join(splunk_db, name)
+
+
+def index_storage_exists(index_name: str, environ: Optional[dict] = None) -> Optional[bool]:
+    """True/False when Splunk db paths are known; None if we cannot tell.
+
+    Used only to log a clear warning. Splunk still decides whether to accept events.
+    """
+    path = splunk_index_dir(index_name, environ=environ)
+    if not path:
+        return None
+    return os.path.isdir(path) or os.path.isdir(os.path.join(path, "db"))
+
+
 def stanza_devices(stanza: InputStanza) -> List[str]:
     return parse_device_sns(stanza.params.get("device_sns"))
 

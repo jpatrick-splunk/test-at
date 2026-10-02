@@ -10,6 +10,7 @@ sys.path.insert(0, str(ROOT / "bin"))
 from zentra.checkpoint import load_checkpoint, save_checkpoint  # noqa: E402
 from zentra.config import (  # noqa: E402
     ConfigError,
+    index_storage_exists,
     parse_device_sns,
     parse_input_xml,
     resolve_api_token,
@@ -83,6 +84,22 @@ class TokenTests(unittest.TestCase):
     def test_missing_token(self):
         with self.assertRaises(ConfigError):
             resolve_api_token("", environ={})
+
+
+class IndexStorageTests(unittest.TestCase):
+    def test_missing_index_dir(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            env = {"SPLUNK_HOME": tmp}
+            self.assertFalse(index_storage_exists("zentra_validate", environ=env))
+
+    def test_existing_index_dir(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            os.makedirs(os.path.join(tmp, "var", "lib", "splunk", "zentra_validate"))
+            env = {"SPLUNK_HOME": tmp}
+            self.assertTrue(index_storage_exists("zentra_validate", environ=env))
+
+    def test_unknown_without_splunk_home(self):
+        self.assertIsNone(index_storage_exists("zentra_validate", environ={}))
 
 
 class UrlTests(unittest.TestCase):
