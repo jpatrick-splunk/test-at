@@ -1,15 +1,7 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <dashboard version="1.1">
   <label>Weather Overview</label>
-  <description>Normalized ZENTRA Cloud v4 field logger observations from the Weather data model. Charts use 15-minute spans to match logger measurement intervals.</description>
-  <search id="base_weather">
-    <query>| datamodel Weather Weather search
-| search Weather.device_sn=$device_sn$
-| rename "Weather.*" as *
-| eval precipitation = coalesce(precipitation, rainfall, rain, precipitation_mm, cumulative_precipitation, daily_precipitation, hourly_precipitation)</query>
-    <earliest>$time.earliest$</earliest>
-    <latest>$time.latest$</latest>
-  </search>
+  <description>15-minute ZENTRA Cloud readings (measurement, value, datetime). Precipitation is rainfall during each interval — Rainfall Totals sums those samples by logger_day.</description>
   <fieldset submitButton="false" autoRun="true">
     <input type="time" token="time" searchWhenChanged="true">
       <label>Time range</label>
@@ -21,8 +13,8 @@
     <input type="dropdown" token="device_sn" searchWhenChanged="true">
       <label>Logger</label>
       <choice value="*">All loggers</choice>
-      <default>*</default>
-      <initialValue>*</initialValue>
+      <default>z6-30302</default>
+      <initialValue>z6-30302</initialValue>
       <fieldForLabel>device_sn</fieldForLabel>
       <fieldForValue>device_sn</fieldForValue>
       <search>
@@ -36,46 +28,57 @@
     <panel>
       <single>
         <title>Latest air temperature</title>
-        <search base="base_weather">
-          <query>| stats latest(air_temperature) as temp latest(air_temperature_unit) as unit
+        <search>
+          <query>`zentra_canonical(air_temperature)` device_sn="$device_sn$"
+| stats latest(value) as temp latest(units) as unit latest(datetime) as datetime
 | eval value = if(isnotnull(temp), temp." ".coalesce(unit,""), "n/a")
 | fields value</query>
+          <earliest>$time.earliest$</earliest>
+          <latest>$time.latest$</latest>
         </search>
-        <option name="underLabel">most recent observation</option>
-        <option name="colorMode">block</option>
-        <option name="useColors">0</option>
+        <option name="underLabel">most recent interval</option>
       </single>
     </panel>
     <panel>
       <single>
         <title>Latest relative humidity</title>
-        <search base="base_weather">
-          <query>| stats latest(relative_humidity) as rh latest(relative_humidity_unit) as unit
+        <search>
+          <query>`zentra_canonical(relative_humidity)` device_sn="$device_sn$"
+| stats latest(value) as rh latest(units) as unit
 | eval value = if(isnotnull(rh), rh." ".coalesce(unit,""), "n/a")
 | fields value</query>
+          <earliest>$time.earliest$</earliest>
+          <latest>$time.latest$</latest>
         </search>
-        <option name="underLabel">most recent observation</option>
+        <option name="underLabel">most recent interval</option>
       </single>
     </panel>
     <panel>
       <single>
-        <title>Wind speed</title>
-        <search base="base_weather">
-          <query>| stats latest(wind_speed) as wind latest(wind_speed_unit) as unit
+        <title>Latest wind speed</title>
+        <search>
+          <query>`zentra_canonical(wind_speed)` device_sn="$device_sn$"
+| stats latest(value) as wind latest(units) as unit
 | eval value = if(isnotnull(wind), wind." ".coalesce(unit,""), "n/a")
 | fields value</query>
+          <earliest>$time.earliest$</earliest>
+          <latest>$time.latest$</latest>
         </search>
-        <option name="underLabel">most recent observation</option>
+        <option name="underLabel">most recent interval</option>
       </single>
     </panel>
     <panel>
       <single>
-        <title>Precipitation (period sum)</title>
-        <search base="base_weather">
-          <query>| stats sum(precipitation) as precip latest(precipitation_unit) as unit
-| eval value = if(isnotnull(precip), round(precip, 2)." ".coalesce(unit,""), "n/a")
+        <title>Rain this period</title>
+        <search>
+          <query>`zentra_interval_precip` device_sn="$device_sn$"
+| stats sum(value) as precip latest(units) as unit
+| eval value = if(isnotnull(precip), round(precip, 3)." ".coalesce(unit,""), "n/a")
 | fields value</query>
+          <earliest>$time.earliest$</earliest>
+          <latest>$time.latest$</latest>
         </search>
+        <option name="underLabel">sum of 15-minute Precipitation</option>
       </single>
     </panel>
   </row>
@@ -83,8 +86,11 @@
     <panel>
       <chart>
         <title>Air temperature</title>
-        <search base="base_weather">
-          <query>| timechart span=15m avg(air_temperature) as air_temperature by device_sn</query>
+        <search>
+          <query>`zentra_canonical(air_temperature)` device_sn="$device_sn$"
+| timechart span=15m avg(value) as air_temperature by device_sn</query>
+          <earliest>$time.earliest$</earliest>
+          <latest>$time.latest$</latest>
         </search>
         <option name="charting.chart">line</option>
         <option name="charting.axisTitleY.text">Temperature</option>
@@ -94,8 +100,11 @@
     <panel>
       <chart>
         <title>Relative humidity</title>
-        <search base="base_weather">
-          <query>| timechart span=15m avg(relative_humidity) as relative_humidity by device_sn</query>
+        <search>
+          <query>`zentra_canonical(relative_humidity)` device_sn="$device_sn$"
+| timechart span=15m avg(value) as relative_humidity by device_sn</query>
+          <earliest>$time.earliest$</earliest>
+          <latest>$time.latest$</latest>
         </search>
         <option name="charting.chart">line</option>
         <option name="charting.axisTitleY.text">Humidity</option>
@@ -107,8 +116,12 @@
     <panel>
       <chart>
         <title>Wind speed and gusts</title>
-        <search base="base_weather">
-          <query>| timechart span=15m avg(wind_speed) as wind_speed max(gust_speed) as gust_speed</query>
+        <search>
+          <query>`zentra_weather_search` device_sn="$device_sn$" measurement_canonical IN (wind_speed, gust_speed)
+| eval series=if(measurement_canonical="gust_speed","gust_speed","wind_speed")
+| timechart span=15m avg(value) by series</query>
+          <earliest>$time.earliest$</earliest>
+          <latest>$time.latest$</latest>
         </search>
         <option name="charting.chart">line</option>
         <option name="charting.axisTitleY.text">Speed</option>
@@ -116,12 +129,14 @@
     </panel>
     <panel>
       <chart>
-        <title>Precipitation (15-minute totals)</title>
-        <search base="base_weather">
-          <query>| timechart span=15m sum(precipitation) as precipitation by device_sn</query>
+        <title>Precipitation (15-minute interval)</title>
+        <search>
+          <query>`zentra_interval_precip` device_sn="$device_sn$"
+| timechart span=15m sum(value) as precipitation by device_sn</query>
+          <earliest>$time.earliest$</earliest>
+          <latest>$time.latest$</latest>
         </search>
         <option name="charting.chart">column</option>
-        <option name="charting.chart.stackMode">stacked</option>
         <option name="charting.axisTitleY.text">Precipitation</option>
       </chart>
     </panel>
@@ -130,9 +145,13 @@
     <panel>
       <map>
         <title>Logger locations</title>
-        <search base="base_weather">
-          <query>| stats latest(air_temperature) as air_temperature latest(latitude) as latitude latest(longitude) as longitude by device_sn
-| geostats latfield=latitude longfield=longitude latest(air_temperature) as air_temperature by device_sn</query>
+        <search>
+          <query>`zentra_canonical(air_temperature)` device_sn="$device_sn$"
+| eval latitude=tonumber(coalesce(latitude, lat))
+| eval longitude=tonumber(coalesce(longitude, lon))
+| stats latest(latitude) as latitude latest(longitude) as longitude latest(value) as air_temperature latest(datetime) as datetime by device_sn</query>
+          <earliest>$time.earliest$</earliest>
+          <latest>$time.latest$</latest>
         </search>
         <option name="mapping.type">marker</option>
         <option name="mapping.map.zoom">4</option>
@@ -140,17 +159,19 @@
     </panel>
     <panel>
       <table>
-        <title>Latest observation by logger</title>
-        <search base="base_weather">
-          <query>| stats latest(_time) as last_seen latest(air_temperature) as air_temperature latest(relative_humidity) as relative_humidity latest(wind_speed) as wind_speed latest(precipitation) as precipitation latest(solar_radiation) as solar_radiation latest(battery_percent) as battery_percent latest(error_flag) as error_flag by device_sn device_name
-| convert ctime(last_seen)
-| sort device_sn</query>
+        <title>Latest value by measurement</title>
+        <search>
+          <query>`zentra_weather_search` device_sn="$device_sn$"
+| stats latest(datetime) as datetime latest(value) as value latest(units) as units by device_sn, measurement, measurement_canonical
+| sort measurement</query>
+          <earliest>$time.earliest$</earliest>
+          <latest>$time.latest$</latest>
         </search>
         <option name="drilldown">row</option>
-        <option name="count">20</option>
+        <option name="count">30</option>
         <drilldown>
-          <link target="_blank">
-            <![CDATA[/app/zentra_weather/logger_detail?form.device_sn=$row.device_sn$&form.time.earliest=$time.earliest$&form.time.latest=$time.latest$]]>
+          <link>
+            <![CDATA[logger_detail?form.device_sn=$row.device_sn$&form.time.earliest=$time.earliest$&form.time.latest=$time.latest$]]>
           </link>
         </drilldown>
       </table>

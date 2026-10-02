@@ -10,6 +10,7 @@ sys.path.insert(0, str(ROOT / "bin"))
 from zentra.checkpoint import load_checkpoint, save_checkpoint  # noqa: E402
 from zentra.config import (  # noqa: E402
     ConfigError,
+    index_storage_exists,
     parse_device_sns,
     parse_input_xml,
     resolve_api_token,
@@ -85,6 +86,22 @@ class TokenTests(unittest.TestCase):
             resolve_api_token("", environ={})
 
 
+class IndexStorageTests(unittest.TestCase):
+    def test_missing_index_dir(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            env = {"SPLUNK_HOME": tmp}
+            self.assertFalse(index_storage_exists("zentra_validate", environ=env))
+
+    def test_existing_index_dir(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            os.makedirs(os.path.join(tmp, "var", "lib", "splunk", "zentra_validate"))
+            env = {"SPLUNK_HOME": tmp}
+            self.assertTrue(index_storage_exists("zentra_validate", environ=env))
+
+    def test_unknown_without_splunk_home(self):
+        self.assertIsNone(index_storage_exists("zentra_validate", environ={}))
+
+
 class UrlTests(unittest.TestCase):
     def test_requires_https(self):
         self.assertEqual(
@@ -104,6 +121,7 @@ class XmlTests(unittest.TestCase):
         self.assertEqual(settings["device_sns"], ["z6-30302"])
         self.assertEqual(settings["api_token"], "from-stanza")
         self.assertEqual(settings["lookback_hours"], 12)
+        self.assertFalse(settings["ignore_checkpoint"])
         self.assertNotIn("session_key", settings)
 
     def test_validation_xml(self):
@@ -120,6 +138,24 @@ class CheckpointTests(unittest.TestCase):
             data = load_checkpoint(tmp, "z6-30302")
             self.assertEqual(data["last_mrid"], 10)
             self.assertEqual(data["last_timestamp_utc"], 200)
+
+    def test_extra_fields_roundtrip(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            save_checkpoint(
+                tmp, "z6-30302", last_mrid=1, last_timestamp_utc=10, extra={"gap_fill_complete": True}
+            )
+            data = load_checkpoint(tmp, "z6-30302")
+            self.assertTrue(data["gap_fill_complete"])
+            self.assertEqual(data["last_mrid"], 1)
+
+    def test_namespace_is_isolated(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            save_checkpoint(tmp, "z6-30302", last_mrid=1, namespace="zentra_weather://field_loggers")
+            save_checkpoint(tmp, "z6-30302", last_mrid=50, namespace="zentra_weather://validate")
+            old = load_checkpoint(tmp, "z6-30302", namespace="zentra_weather://field_loggers")
+            fresh = load_checkpoint(tmp, "z6-30302", namespace="zentra_weather://validate")
+            self.assertEqual(old["last_mrid"], 1)
+            self.assertEqual(fresh["last_mrid"], 50)
 
 
 if __name__ == "__main__":

@@ -27,7 +27,9 @@ def write_event(
 ) -> None:
     payload = json.dumps(data, separators=(",", ":"), ensure_ascii=True, default=str)
     time_value = data.get("timestamp_utc")
-    parts = ['<event stanza="%s" unbroken="1">' % _escape_attr(stanza)]
+    # Do not set unbroken="1". That flag concatenates <data> from every
+    # reading into one Splunk event (the 381k dataframe dump became 1 row).
+    parts = ['<event stanza="%s">' % _escape_attr(stanza)]
     if time_value is not None:
         parts.append("<time>%s</time>" % _escape_attr(str(time_value)))
     if source:

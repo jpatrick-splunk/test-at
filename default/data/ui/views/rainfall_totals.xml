@@ -1,0 +1,142 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<dashboard version="1.1">
+  <label>Rainfall Totals</label>
+  <description>ZENTRA Cloud charts Precipitation as rainfall during each 15-minute interval. This view keeps those samples and sums value by logger_day (the date in datetime) so customers can see daily and weekly rain. Zeros are dry intervals and do not change the total.</description>
+  <search id="precip_base">
+    <query>`zentra_interval_precip` device_sn="$device_sn$"</query>
+    <earliest>$time.earliest$</earliest>
+    <latest>$time.latest$</latest>
+  </search>
+  <fieldset submitButton="false" autoRun="true">
+    <input type="time" token="time" searchWhenChanged="true">
+      <label>Time range</label>
+      <default>
+        <earliest>-14d@d</earliest>
+        <latest>now</latest>
+      </default>
+    </input>
+    <input type="dropdown" token="device_sn" searchWhenChanged="true">
+      <label>Logger</label>
+      <choice value="*">All loggers</choice>
+      <default>z6-30302</default>
+      <initialValue>z6-30302</initialValue>
+      <fieldForLabel>device_sn</fieldForLabel>
+      <fieldForValue>device_sn</fieldForValue>
+      <search>
+        <query>`zentra_weather_search` | stats count by device_sn | sort device_sn</query>
+        <earliest>$time.earliest$</earliest>
+        <latest>$time.latest$</latest>
+      </search>
+    </input>
+  </fieldset>
+  <row>
+    <panel>
+      <single>
+        <title>Rain this period (sum of 15-minute samples)</title>
+        <search base="precip_base">
+          <query>| stats sum(value) as rainfall latest(units) as units
+| eval value = if(isnotnull(rainfall), round(rainfall, 3)." ".coalesce(units,""), "n/a")
+| fields value</query>
+        </search>
+        <option name="underLabel">not a single ZENTRA chart point — this is accumulated rainfall</option>
+      </single>
+    </panel>
+    <panel>
+      <single>
+        <title>Rain today (logger calendar)</title>
+        <search>
+          <query>`zentra_interval_precip` device_sn="$device_sn$"
+| where logger_day=strftime(now(), "%Y-%m-%d")
+| stats sum(value) as rainfall latest(units) as units
+| eval value = if(isnotnull(rainfall), round(rainfall, 3)." ".coalesce(units,""), "n/a")
+| fields value</query>
+          <earliest>-2d@d</earliest>
+          <latest>now</latest>
+        </search>
+        <option name="underLabel">sum of Precipitation where logger_day is today</option>
+      </single>
+    </panel>
+    <panel>
+      <single>
+        <title>Rain this week (logger calendar)</title>
+        <search>
+          <query>`zentra_interval_precip` device_sn="$device_sn$"
+| eval logger_week=strftime(strptime(logger_day, "%Y-%m-%d"), "%Y-%W")
+| eval this_week=strftime(now(), "%Y-%W")
+| where logger_week=this_week
+| stats sum(value) as rainfall latest(units) as units
+| eval value = if(isnotnull(rainfall), round(rainfall, 3)." ".coalesce(units,""), "n/a")
+| fields value</query>
+          <earliest>-14d@d</earliest>
+          <latest>now</latest>
+        </search>
+        <option name="underLabel">sum of this week's logger_day samples</option>
+      </single>
+    </panel>
+  </row>
+  <row>
+    <panel>
+      <chart>
+        <title>15-minute Precipitation (same points as ZENTRA Cloud)</title>
+        <search base="precip_base">
+          <query>| timechart span=15m sum(value) as precipitation</query>
+        </search>
+        <option name="charting.chart">column</option>
+        <option name="charting.legend.placement">none</option>
+      </chart>
+    </panel>
+    <panel>
+      <table>
+        <title>Intervals with rain (value &gt; 0)</title>
+        <search>
+          <query>`zentra_precip_rain` device_sn="$device_sn$"
+| table datetime, logger_day, value, units
+| sort - datetime</query>
+          <earliest>$time.earliest$</earliest>
+          <latest>$time.latest$</latest>
+        </search>
+        <option name="drilldown">none</option>
+        <option name="count">20</option>
+      </table>
+    </panel>
+  </row>
+  <row>
+    <panel>
+      <chart>
+        <title>Daily rainfall (sum of that day's 15-minute samples)</title>
+        <search base="precip_base">
+          <query>| eval _time=strptime(logger_day, "%Y-%m-%d")
+| timechart span=1d sum(value) as daily_rainfall</query>
+        </search>
+        <option name="charting.chart">column</option>
+        <option name="charting.legend.placement">none</option>
+      </chart>
+    </panel>
+    <panel>
+      <chart>
+        <title>Weekly rainfall (sum of that week's 15-minute samples)</title>
+        <search base="precip_base">
+          <query>| eval _time=strptime(logger_day, "%Y-%m-%d")
+| timechart span=1w sum(value) as weekly_rainfall</query>
+        </search>
+        <option name="charting.chart">column</option>
+        <option name="charting.legend.placement">none</option>
+      </chart>
+    </panel>
+  </row>
+  <row>
+    <panel>
+      <table>
+        <title>Daily rainfall table — sum Precipitation by logger_day</title>
+        <search base="precip_base">
+          <query>| stats sum(value) as rainfall latest(units) as units count as interval_samples sum(eval(if(value&gt;0,1,0))) as wet_intervals by logger_day, device_sn
+| eval rainfall=round(rainfall, 3)
+| sort - logger_day
+| rename logger_day as day, rainfall as rainfall_total</query>
+        </search>
+        <option name="drilldown">none</option>
+        <option name="count">14</option>
+      </table>
+    </panel>
+  </row>
+</dashboard>

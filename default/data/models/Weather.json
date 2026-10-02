@@ -1,7 +1,7 @@
 {
   "modelName": "Weather",
   "displayName": "Weather",
-  "description": "Normalized ZENTRA Cloud v4 field logger observations. One event per measurement timestamp with ATMOS/ZL6 readings pivoted onto weather fields.",
+  "description": "ZENTRA Cloud v4 15-minute field logger readings. One event per measurement (long format). Child datasets filter by measurement_canonical. Precipitation.value is interval rainfall \u2014 sum by logger_day for daily totals.",
   "objectSummary": {
     "AccelerationSearch": {}
   },
@@ -10,7 +10,7 @@
       "objectName": "Weather",
       "displayName": "Weather",
       "parentName": "BaseEvent",
-      "comment": "Root weather observation from a ZENTRA Cloud field logger.",
+      "comment": "One ZENTRA Cloud 15-minute measurement reading (long format: measurement, value, datetime).",
       "lineage": "Weather",
       "fields": [
         {
@@ -74,6 +74,18 @@
           "comment": ""
         },
         {
+          "fieldName": "sub_sensor_index",
+          "owner": "Weather",
+          "type": "number",
+          "fieldSearch": "",
+          "required": false,
+          "multivalue": false,
+          "hidden": false,
+          "editable": true,
+          "displayName": "Sub-sensor Index",
+          "comment": ""
+        },
+        {
           "fieldName": "mrid",
           "owner": "Weather",
           "type": "number",
@@ -94,8 +106,20 @@
           "multivalue": false,
           "hidden": false,
           "editable": true,
-          "displayName": "Logger Datetime",
-          "comment": "Timestamp in the logger time zone as returned by ZENTRA Cloud."
+          "displayName": "Measurement Datetime",
+          "comment": "Logger-local measurement time from ZENTRA Cloud (source of truth for _time)."
+        },
+        {
+          "fieldName": "logger_day",
+          "owner": "Weather",
+          "type": "string",
+          "fieldSearch": "",
+          "required": false,
+          "multivalue": false,
+          "hidden": false,
+          "editable": true,
+          "displayName": "Logger Day",
+          "comment": "Local calendar date (YYYY-MM-DD) taken from datetime."
         },
         {
           "fieldName": "tz_offset",
@@ -108,6 +132,18 @@
           "editable": true,
           "displayName": "Timezone Offset",
           "comment": "Offset from UTC in seconds."
+        },
+        {
+          "fieldName": "timestamp_utc",
+          "owner": "Weather",
+          "type": "number",
+          "fieldSearch": "",
+          "required": false,
+          "multivalue": false,
+          "hidden": false,
+          "editable": true,
+          "displayName": "Timestamp UTC",
+          "comment": "Unix epoch derived from datetime."
         },
         {
           "fieldName": "latitude",
@@ -182,19 +218,7 @@
           "comment": ""
         },
         {
-          "fieldName": "air_temperature",
-          "owner": "Weather",
-          "type": "number",
-          "fieldSearch": "",
-          "required": false,
-          "multivalue": false,
-          "hidden": false,
-          "editable": true,
-          "displayName": "Air Temperature",
-          "comment": ""
-        },
-        {
-          "fieldName": "air_temperature_unit",
+          "fieldName": "measurement",
           "owner": "Weather",
           "type": "string",
           "fieldSearch": "",
@@ -202,23 +226,11 @@
           "multivalue": false,
           "hidden": false,
           "editable": true,
-          "displayName": "Air Temperature Unit",
-          "comment": ""
+          "displayName": "Measurement",
+          "comment": "Original ZENTRA chart name, for example Precipitation."
         },
         {
-          "fieldName": "relative_humidity",
-          "owner": "Weather",
-          "type": "number",
-          "fieldSearch": "",
-          "required": false,
-          "multivalue": false,
-          "hidden": false,
-          "editable": true,
-          "displayName": "Relative Humidity",
-          "comment": ""
-        },
-        {
-          "fieldName": "relative_humidity_unit",
+          "fieldName": "measurement_canonical",
           "owner": "Weather",
           "type": "string",
           "fieldSearch": "",
@@ -226,11 +238,11 @@
           "multivalue": false,
           "hidden": false,
           "editable": true,
-          "displayName": "Relative Humidity Unit",
-          "comment": ""
+          "displayName": "Canonical Measurement",
+          "comment": "Normalized name used for dashboards and child datasets."
         },
         {
-          "fieldName": "atmospheric_pressure",
+          "fieldName": "value",
           "owner": "Weather",
           "type": "number",
           "fieldSearch": "",
@@ -238,11 +250,11 @@
           "multivalue": false,
           "hidden": false,
           "editable": true,
-          "displayName": "Atmospheric Pressure",
-          "comment": ""
+          "displayName": "Value",
+          "comment": "Interval sample value as returned by ZENTRA Cloud."
         },
         {
-          "fieldName": "atmospheric_pressure_unit",
+          "fieldName": "units",
           "owner": "Weather",
           "type": "string",
           "fieldSearch": "",
@@ -250,35 +262,11 @@
           "multivalue": false,
           "hidden": false,
           "editable": true,
-          "displayName": "Atmospheric Pressure Unit",
+          "displayName": "Units",
           "comment": ""
         },
         {
-          "fieldName": "vapor_pressure",
-          "owner": "Weather",
-          "type": "number",
-          "fieldSearch": "",
-          "required": false,
-          "multivalue": false,
-          "hidden": false,
-          "editable": true,
-          "displayName": "Vapor Pressure",
-          "comment": ""
-        },
-        {
-          "fieldName": "wind_speed",
-          "owner": "Weather",
-          "type": "number",
-          "fieldSearch": "",
-          "required": false,
-          "multivalue": false,
-          "hidden": false,
-          "editable": true,
-          "displayName": "Wind Speed",
-          "comment": ""
-        },
-        {
-          "fieldName": "wind_speed_unit",
+          "fieldName": "aggregation",
           "owner": "Weather",
           "type": "string",
           "fieldSearch": "",
@@ -286,47 +274,11 @@
           "multivalue": false,
           "hidden": false,
           "editable": true,
-          "displayName": "Wind Speed Unit",
-          "comment": ""
+          "displayName": "Aggregation",
+          "comment": "How to roll 15-minute samples to a day or week: sum, avg, min, or max."
         },
         {
-          "fieldName": "wind_direction",
-          "owner": "Weather",
-          "type": "number",
-          "fieldSearch": "",
-          "required": false,
-          "multivalue": false,
-          "hidden": false,
-          "editable": true,
-          "displayName": "Wind Direction",
-          "comment": "Degrees from north."
-        },
-        {
-          "fieldName": "gust_speed",
-          "owner": "Weather",
-          "type": "number",
-          "fieldSearch": "",
-          "required": false,
-          "multivalue": false,
-          "hidden": false,
-          "editable": true,
-          "displayName": "Gust Speed",
-          "comment": ""
-        },
-        {
-          "fieldName": "precipitation",
-          "owner": "Weather",
-          "type": "number",
-          "fieldSearch": "",
-          "required": false,
-          "multivalue": false,
-          "hidden": false,
-          "editable": true,
-          "displayName": "Precipitation",
-          "comment": ""
-        },
-        {
-          "fieldName": "precipitation_unit",
+          "fieldName": "value_kind",
           "owner": "Weather",
           "type": "string",
           "fieldSearch": "",
@@ -334,11 +286,11 @@
           "multivalue": false,
           "hidden": false,
           "editable": true,
-          "displayName": "Precipitation Unit",
+          "displayName": "Value Kind",
           "comment": ""
         },
         {
-          "fieldName": "solar_radiation",
+          "fieldName": "interval_seconds",
           "owner": "Weather",
           "type": "number",
           "fieldSearch": "",
@@ -346,23 +298,11 @@
           "multivalue": false,
           "hidden": false,
           "editable": true,
-          "displayName": "Solar Radiation",
+          "displayName": "Interval Seconds",
           "comment": ""
         },
         {
-          "fieldName": "solar_radiation_unit",
-          "owner": "Weather",
-          "type": "string",
-          "fieldSearch": "",
-          "required": false,
-          "multivalue": false,
-          "hidden": false,
-          "editable": true,
-          "displayName": "Solar Radiation Unit",
-          "comment": ""
-        },
-        {
-          "fieldName": "lightning_activity",
+          "fieldName": "precision",
           "owner": "Weather",
           "type": "number",
           "fieldSearch": "",
@@ -370,103 +310,7 @@
           "multivalue": false,
           "hidden": false,
           "editable": true,
-          "displayName": "Lightning Activity",
-          "comment": ""
-        },
-        {
-          "fieldName": "lightning_distance",
-          "owner": "Weather",
-          "type": "number",
-          "fieldSearch": "",
-          "required": false,
-          "multivalue": false,
-          "hidden": false,
-          "editable": true,
-          "displayName": "Lightning Distance",
-          "comment": ""
-        },
-        {
-          "fieldName": "dew_point",
-          "owner": "Weather",
-          "type": "number",
-          "fieldSearch": "",
-          "required": false,
-          "multivalue": false,
-          "hidden": false,
-          "editable": true,
-          "displayName": "Dew Point",
-          "comment": ""
-        },
-        {
-          "fieldName": "battery_percent",
-          "owner": "Weather",
-          "type": "number",
-          "fieldSearch": "",
-          "required": false,
-          "multivalue": false,
-          "hidden": false,
-          "editable": true,
-          "displayName": "Battery Percent",
-          "comment": ""
-        },
-        {
-          "fieldName": "signal_percent",
-          "owner": "Weather",
-          "type": "number",
-          "fieldSearch": "",
-          "required": false,
-          "multivalue": false,
-          "hidden": false,
-          "editable": true,
-          "displayName": "Signal Percent",
-          "comment": ""
-        },
-        {
-          "fieldName": "water_content",
-          "owner": "Weather",
-          "type": "number",
-          "fieldSearch": "",
-          "required": false,
-          "multivalue": false,
-          "hidden": false,
-          "editable": true,
-          "displayName": "Water Content",
-          "comment": ""
-        },
-        {
-          "fieldName": "hourly_reference_et",
-          "owner": "Weather",
-          "type": "number",
-          "fieldSearch": "",
-          "required": false,
-          "multivalue": false,
-          "hidden": false,
-          "editable": true,
-          "displayName": "Hourly Reference ET",
-          "comment": ""
-        },
-        {
-          "fieldName": "x_axis_level",
-          "owner": "Weather",
-          "type": "number",
-          "fieldSearch": "",
-          "required": false,
-          "multivalue": false,
-          "hidden": false,
-          "editable": true,
-          "displayName": "X-Axis Level",
-          "comment": ""
-        },
-        {
-          "fieldName": "y_axis_level",
-          "owner": "Weather",
-          "type": "number",
-          "fieldSearch": "",
-          "required": false,
-          "multivalue": false,
-          "hidden": false,
-          "editable": true,
-          "displayName": "Y-Axis Level",
+          "displayName": "Precision",
           "comment": ""
         },
         {
@@ -479,7 +323,7 @@
           "hidden": false,
           "editable": true,
           "displayName": "Error Flag",
-          "comment": "True when any measurement in the observation was marked suspect by ZENTRA Cloud."
+          "comment": "True when ZENTRA Cloud marked this sample suspect."
         },
         {
           "fieldName": "error_description",
@@ -509,7 +353,161 @@
       "calculations": [],
       "constraints": [
         {
-          "search": "sourcetype=zentra:weather OR sourcetype=zentra_weather OR tag=weather"
+          "search": "sourcetype=zentra:reading measurement=*"
+        }
+      ]
+    },
+    {
+      "objectName": "Precipitation",
+      "displayName": "Precipitation",
+      "parentName": "Weather",
+      "comment": "15-minute interval rainfall. Sum value by logger_day for daily totals.",
+      "lineage": "Weather.Precipitation",
+      "fields": [],
+      "calculations": [],
+      "constraints": [
+        {
+          "search": "measurement_canonical=precipitation"
+        }
+      ]
+    },
+    {
+      "objectName": "AirTemperature",
+      "displayName": "Air Temperature",
+      "parentName": "Weather",
+      "comment": "Interval air temperature samples. Average to roll up.",
+      "lineage": "Weather.AirTemperature",
+      "fields": [],
+      "calculations": [],
+      "constraints": [
+        {
+          "search": "measurement_canonical=air_temperature"
+        }
+      ]
+    },
+    {
+      "objectName": "RelativeHumidity",
+      "displayName": "Relative Humidity",
+      "parentName": "Weather",
+      "comment": "",
+      "lineage": "Weather.RelativeHumidity",
+      "fields": [],
+      "calculations": [],
+      "constraints": [
+        {
+          "search": "measurement_canonical=relative_humidity"
+        }
+      ]
+    },
+    {
+      "objectName": "WindSpeed",
+      "displayName": "Wind Speed",
+      "parentName": "Weather",
+      "comment": "",
+      "lineage": "Weather.WindSpeed",
+      "fields": [],
+      "calculations": [],
+      "constraints": [
+        {
+          "search": "measurement_canonical=wind_speed"
+        }
+      ]
+    },
+    {
+      "objectName": "GustSpeed",
+      "displayName": "Gust Speed",
+      "parentName": "Weather",
+      "comment": "Interval gust; use max to roll up.",
+      "lineage": "Weather.GustSpeed",
+      "fields": [],
+      "calculations": [],
+      "constraints": [
+        {
+          "search": "measurement_canonical=gust_speed"
+        }
+      ]
+    },
+    {
+      "objectName": "WindDirection",
+      "displayName": "Wind Direction",
+      "parentName": "Weather",
+      "comment": "",
+      "lineage": "Weather.WindDirection",
+      "fields": [],
+      "calculations": [],
+      "constraints": [
+        {
+          "search": "measurement_canonical=wind_direction"
+        }
+      ]
+    },
+    {
+      "objectName": "SolarRadiation",
+      "displayName": "Solar Radiation",
+      "parentName": "Weather",
+      "comment": "",
+      "lineage": "Weather.SolarRadiation",
+      "fields": [],
+      "calculations": [],
+      "constraints": [
+        {
+          "search": "measurement_canonical=solar_radiation"
+        }
+      ]
+    },
+    {
+      "objectName": "AtmosphericPressure",
+      "displayName": "Atmospheric Pressure",
+      "parentName": "Weather",
+      "comment": "",
+      "lineage": "Weather.AtmosphericPressure",
+      "fields": [],
+      "calculations": [],
+      "constraints": [
+        {
+          "search": "measurement_canonical=atmospheric_pressure"
+        }
+      ]
+    },
+    {
+      "objectName": "DewPoint",
+      "displayName": "Dew Point",
+      "parentName": "Weather",
+      "comment": "",
+      "lineage": "Weather.DewPoint",
+      "fields": [],
+      "calculations": [],
+      "constraints": [
+        {
+          "search": "measurement_canonical=dew_point"
+        }
+      ]
+    },
+    {
+      "objectName": "BatteryPercent",
+      "displayName": "Battery Percent",
+      "parentName": "Weather",
+      "comment": "",
+      "lineage": "Weather.BatteryPercent",
+      "fields": [],
+      "calculations": [],
+      "constraints": [
+        {
+          "search": "measurement_canonical=battery_percent"
+        }
+      ]
+    },
+    {
+      "objectName": "SignalPercent",
+      "displayName": "Signal Percent",
+      "parentName": "Weather",
+      "comment": "",
+      "lineage": "Weather.SignalPercent",
+      "fields": [],
+      "calculations": [],
+      "constraints": [
+        {
+          "search": "measurement_canonical=signal_percent"
         }
       ]
     }

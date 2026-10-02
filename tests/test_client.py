@@ -53,8 +53,16 @@ class ClientTests(unittest.TestCase):
         self.assertIn("device_sn=z6-30302", url)
         self.assertIn("start_mrid=50", url)
         self.assertNotIn("start_date=", url)
-        self.assertIn("output_format=json", url)
+        self.assertIn("output_format=df", url)
         self.assertIn("sort_by=ascending", url)
+        json_url = build_readings_url(
+            "https://zentracloud.com",
+            "z6-30302",
+            start_date="2024-01-01 00:00:00",
+            output_format="json",
+        )
+        self.assertIn("output_format=json", json_url)
+        self.assertIn("start_date=", json_url)
         self.assertIn("location=true", url)
 
     def test_fetch_readings_page_sends_auth_and_parses_json(self):
@@ -100,6 +108,92 @@ class ClientTests(unittest.TestCase):
     def test_next_page_from_pagination(self):
         self.assertEqual(next_page_number({"pagination": {"next_page": 2}}, 1, 2000), 2)
         self.assertIsNone(next_page_number({"pagination": {"next_page": None}}, 1, 2000))
+
+    def test_full_dataframe_dump_does_not_invent_page_two(self):
+        payload = {
+            "data": json.dumps(
+                {
+                    "columns": ["timestamp_utc", "Precipitation"],
+                    "data": [[1720000000 + i, 0.1] for i in range(3000)],
+                }
+            )
+        }
+        self.assertIsNone(next_page_number(payload, 1, 2000))
+
+    def test_long_format_full_page_requests_next(self):
+        payload = {
+            "data": json.dumps(
+                {
+                    "columns": ["timestamp_utc", "measurement", "value", "latitude"],
+                    "data": [
+                        [1720000000 + i, "Precipitation", 0.1, 46.75] for i in range(2000)
+                    ],
+                }
+            ),
+            "pagination": {
+                "per_page": 2000,
+                "page_num": 1,
+                "page_num_readings": 2000,
+                "page_num_outputs": 2000,
+                "next_url": "https://zentracloud.com/api/v4/get_readings/?page_num=2",
+            },
+        }
+        self.assertEqual(next_page_number(payload, 1, 2000), 2)
+
+    def test_long_format_output_rows_are_not_readings(self):
+        payload = {
+            "data": json.dumps(
+                {
+                    "columns": ["timestamp_utc", "measurement", "value", "latitude"],
+                    "data": [
+                        [1720000000 + i, "Precipitation", 0.1, 46.75] for i in range(2000)
+                    ],
+                }
+            )
+        }
+        self.assertIsNone(next_page_number(payload, 1, 2000))
+
+    def test_page_num_readings_short_page_ignores_next_url(self):
+        payload = {
+            "data": "{}",
+            "pagination": {
+                "per_page": 2000,
+                "page_num": 1,
+                "page_num_readings": 833,
+                "page_num_outputs": 24157,
+                "next_url": "https://zentracloud.com/api/v4/get_readings/?page_num=2",
+                "page_start_date": "2026-09-23 23:30:00-05:00",
+                "page_end_date": "2026-10-02 15:30:00-05:00",
+                "max_mrid": 60612,
+            },
+        }
+        self.assertIsNone(next_page_number(payload, 1, 2000))
+
+    def test_empty_page_with_next_url_stops(self):
+        payload = {
+            "data": {},
+            "pagination": {
+                "per_page": 2000,
+                "page_num": 2,
+                "page_num_readings": 0,
+                "page_num_outputs": 0,
+                "next_url": "https://zentracloud.com/api/v4/get_readings/?page_num=3",
+            },
+        }
+        self.assertIsNone(next_page_number(payload, 2, 2000))
+
+    def test_long_format_partial_page_stops(self):
+        payload = {
+            "data": json.dumps(
+                {
+                    "columns": ["timestamp_utc", "measurement", "value", "latitude"],
+                    "data": [
+                        [1720000000 + i, "Precipitation", 0.1, 46.75] for i in range(1999)
+                    ],
+                }
+            )
+        }
+        self.assertIsNone(next_page_number(payload, 1, 2000))
 
     def test_iter_pages_stops_and_sleeps_between_pages(self):
         calls = {"n": 0, "sleeps": []}
