@@ -197,8 +197,22 @@ class AppPackagingTests(unittest.TestCase):
         self.assertEqual(model["modelName"], "Weather")
         self.assertEqual(model["objects"][0]["parentName"], "BaseEvent")
         field_names = {f["fieldName"] for f in model["objects"][0]["fields"]}
-        for name in ("device_sn", "air_temperature", "wind_speed", "precipitation", "error_flag"):
+        for name in (
+            "device_sn",
+            "measurement",
+            "measurement_canonical",
+            "value",
+            "datetime",
+            "logger_day",
+            "units",
+            "error_flag",
+        ):
             self.assertIn(name, field_names)
+        self.assertNotIn("air_temperature", field_names)
+        object_names = {obj["objectName"] for obj in model["objects"]}
+        self.assertIn("Precipitation", object_names)
+        self.assertIn("AirTemperature", object_names)
+        self.assertEqual(model["objects"][0]["constraints"][0]["search"], "sourcetype=zentra:reading measurement=*")
         for view in (
             "collection_status.xml",
             "rainfall_totals.xml",
@@ -208,10 +222,20 @@ class AppPackagingTests(unittest.TestCase):
             "data_quality.xml",
         ):
             ET.parse(app / "default" / "data" / "ui" / "views" / view)
+            text = (app / "default" / "data" / "ui" / "views" / view).read_text()
+            self.assertNotIn("| datamodel Weather Weather search", text)
+            self.assertNotIn("_time=_time+coalesce", text)
+        nav = (app / "default" / "data" / "ui" / "nav" / "default.xml").read_text()
         ET.parse(app / "default" / "data" / "ui" / "nav" / "default.xml")
+        self.assertIn('view name="weather_overview"', nav)
+        self.assertIn('view name="rainfall_totals"', nav)
+        macros = (app / "default" / "macros.conf").read_text()
+        self.assertIn("[zentra_canonical(1)]", macros)
+        self.assertIn("[zentra_precip_rain]", macros)
+        self.assertIn('measurement="$name$"', macros)
         validation = (app / "default" / "data" / "ui" / "views" / "reading_validation.xml").read_text()
+        self.assertIn("`zentra_precip_rain`", validation)
         self.assertIn("| table datetime,", validation)
-        self.assertNotIn("_time=_time+coalesce", validation)
 
     def test_default_inputs_have_no_token(self):
         text = (ROOT / "default" / "inputs.conf").read_text()

@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <dashboard version="1.1">
   <label>Rainfall Totals</label>
-  <description>ZENTRA Cloud charts Precipitation as rainfall during each 15-minute interval (see https://zentracloud.com/#/dashboard_detail/z6-30302). This view leaves those interval samples unchanged and sums them into daily and weekly accumulation so customers can see how much rain fell over a day or week. Units match the logger account (typically mm).</description>
+  <description>ZENTRA Cloud charts Precipitation as rainfall during each 15-minute interval. This view keeps those samples and sums value by logger_day (the date in datetime) so customers can see daily and weekly rain. Zeros are dry intervals and do not change the total.</description>
   <search id="precip_base">
     <query>`zentra_interval_precip` device_sn="$device_sn$"</query>
     <earliest>$time.earliest$</earliest>
@@ -43,30 +43,34 @@
     </panel>
     <panel>
       <single>
-        <title>Rain today</title>
+        <title>Rain today (logger calendar)</title>
         <search>
           <query>`zentra_interval_precip` device_sn="$device_sn$"
+| where logger_day=strftime(now(), "%Y-%m-%d")
 | stats sum(value) as rainfall latest(units) as units
 | eval value = if(isnotnull(rainfall), round(rainfall, 3)." ".coalesce(units,""), "n/a")
 | fields value</query>
-          <earliest>@d</earliest>
+          <earliest>-2d@d</earliest>
           <latest>now</latest>
         </search>
-        <option name="underLabel">sum of today's 15-minute Precipitation readings</option>
+        <option name="underLabel">sum of Precipitation where logger_day is today</option>
       </single>
     </panel>
     <panel>
       <single>
-        <title>Rain this week</title>
+        <title>Rain this week (logger calendar)</title>
         <search>
           <query>`zentra_interval_precip` device_sn="$device_sn$"
+| eval logger_week=strftime(strptime(logger_day, "%Y-%m-%d"), "%Y-%W")
+| eval this_week=strftime(now(), "%Y-%W")
+| where logger_week=this_week
 | stats sum(value) as rainfall latest(units) as units
 | eval value = if(isnotnull(rainfall), round(rainfall, 3)." ".coalesce(units,""), "n/a")
 | fields value</query>
-          <earliest>@w0</earliest>
+          <earliest>-14d@d</earliest>
           <latest>now</latest>
         </search>
-        <option name="underLabel">sum of this week's 15-minute Precipitation readings</option>
+        <option name="underLabel">sum of this week's logger_day samples</option>
       </single>
     </panel>
   </row>
@@ -80,6 +84,20 @@
         <option name="charting.chart">column</option>
         <option name="charting.legend.placement">none</option>
       </chart>
+    </panel>
+    <panel>
+      <table>
+        <title>Intervals with rain (value &gt; 0)</title>
+        <search>
+          <query>`zentra_precip_rain` device_sn="$device_sn$"
+| table datetime, logger_day, value, units
+| sort - datetime</query>
+          <earliest>$time.earliest$</earliest>
+          <latest>$time.latest$</latest>
+        </search>
+        <option name="drilldown">none</option>
+        <option name="count">20</option>
+      </table>
     </panel>
   </row>
   <row>
@@ -109,12 +127,12 @@
   <row>
     <panel>
       <table>
-        <title>Daily rainfall table — compare a day's total here, not a 15-minute tooltip on ZENTRA</title>
+        <title>Daily rainfall table — sum Precipitation by logger_day</title>
         <search base="precip_base">
-          <query>| stats sum(value) as rainfall latest(units) as units dc(value) as interval_samples by logger_day, device_sn, measurement
+          <query>| stats sum(value) as rainfall latest(units) as units count as interval_samples sum(eval(if(value&gt;0,1,0))) as wet_intervals by logger_day, device_sn
 | eval rainfall=round(rainfall, 3)
 | sort - logger_day
-| rename logger_day as day, rainfall as rainfall_total, measurement as zentra_measurement</query>
+| rename logger_day as day, rainfall as rainfall_total</query>
         </search>
         <option name="drilldown">none</option>
         <option name="count">14</option>
