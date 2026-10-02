@@ -1,6 +1,7 @@
 <nav search_view="search" color="#1B5E20">
-  <view name="rainfall_totals" default="true" />
+  <view name="collection_status" default="true" />
   <view name="reading_validation" />
+  <view name="rainfall_totals" />
   <view name="search" />
   <view name="dashboards" />
 </nav>

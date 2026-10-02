@@ -1,0 +1,79 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<dashboard version="1.1">
+  <label>Collection Status</label>
+  <description>If Rainfall Totals is empty, start here. Events sent to an index that does not exist are dropped. This page searches every index and the Splunk poller log.</description>
+  <fieldset submitButton="false" autoRun="true">
+    <input type="time" token="time" searchWhenChanged="true">
+      <label>Time range</label>
+      <default>
+        <earliest>0</earliest>
+        <latest>now</latest>
+      </default>
+    </input>
+  </fieldset>
+  <row>
+    <panel>
+      <html>
+        <p>Create the index, then point the input at it:</p>
+        <ol>
+          <li>Settings → Indexes → New Index → name <code>zentra_validate</code> → Save (or <code>$SPLUNK_HOME/bin/splunk add index zentra_validate</code>).</li>
+          <li>Settings → Data inputs → ZENTRA Cloud Weather → open <code>validate</code>.</li>
+          <li>Confirm <b>Index</b> is <code>zentra_validate</code> (not main) and <b>API token</b> is filled.</li>
+          <li>Disable the input, Save, Enable it again to force a poll. Wait about a minute.</li>
+        </ol>
+        <p>Search <code>index=_internal zentra_weather</code> if the tables below are empty.</p>
+      </html>
+    </panel>
+  </row>
+  <row>
+    <panel>
+      <table>
+        <title>ZENTRA readings in ANY index (empty means the poller has not indexed yet)</title>
+        <search>
+          <query>index=* (sourcetype=zentra:reading OR sourcetype=zentra:weather OR source=zentra_weather://*)
+| stats count as events max(_time) as last_event by index, sourcetype
+| eval last_event=strftime(last_event, "%Y-%m-%d %H:%M:%S")
+| sort - events</query>
+          <earliest>$time.earliest$</earliest>
+          <latest>$time.latest$</latest>
+        </search>
+        <option name="drilldown">none</option>
+      </table>
+    </panel>
+  </row>
+  <row>
+    <panel>
+      <table>
+        <title>Poller log (splunkd) — look for skipping, poll failed, or index=zentra_validate</title>
+        <search>
+          <query>index=_internal sourcetype=splunkd zentra_weather
+| sort - _time
+| table _time, _raw
+| head 50</query>
+          <earliest>-24h@h</earliest>
+          <latest>now</latest>
+        </search>
+        <option name="drilldown">none</option>
+        <option name="count">20</option>
+        <option name="wrap">true</option>
+      </table>
+    </panel>
+  </row>
+  <row>
+    <panel>
+      <table>
+        <title>Dropped because the index does not exist</title>
+        <search>
+          <query>index=_internal sourcetype=splunkd ("unconfigured/disabled/deleted index" OR "received event for unconfigured") zentra_validate
+| sort - _time
+| table _time, _raw
+| head 20</query>
+          <earliest>-24h@h</earliest>
+          <latest>now</latest>
+        </search>
+        <option name="drilldown">none</option>
+        <option name="wrap">true</option>
+      </table>
+    </panel>
+  </row>
+</dashboard>

@@ -27,3 +27,6 @@ export = system
 
 [inputs]
 export = system
+
+[indexes]
+export = system

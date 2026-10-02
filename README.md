@@ -19,14 +19,32 @@ Temperature, humidity, and wind stay interval averages (the logger already avera
 
 Do not keep mixing events from `main` or `weather`. This revision writes **one event per measurement reading** to index `zentra_validate`, sourcetype `zentra:reading`.
 
-1. Place this repository at `$SPLUNK_HOME/etc/apps/zentra_weather` and restart Splunk so `zentra_validate` is created.
-2. In **Settings → Data inputs → ZENTRA Cloud Weather**:
+**The index must exist before the input runs.** Creating a data input named `validate` does not create the index. If `zentra_validate` is missing, Splunk drops every event and searches stay empty.
+
+1. Place this repository at `$SPLUNK_HOME/etc/apps/zentra_weather`.
+2. Create the index, then restart Splunk:
+
+   ```
+   $SPLUNK_HOME/bin/splunk add index zentra_validate
+   $SPLUNK_HOME/bin/splunk restart
+   ```
+
+   Or **Settings → Indexes → New Index** → name `zentra_validate` → Save, then restart.
+3. Confirm **Settings → Indexes** lists `zentra_validate`.
+4. In **Settings → Data inputs → ZENTRA Cloud Weather**:
    - Disable any older `field_loggers` input.
-   - Enable `validate`, set the API token, keep `device_sns = z6-30302` and `index = zentra_validate`.
-3. Optional but recommended: delete leftover checkpoint files under `$SPLUNK_HOME/var/lib/splunk/modinputs/zentra_weather/` so the first poll backfills 14 days. The `validate` stanza also uses its own checkpoint subdirectory, so a first enable is a new pull even if old files remain.
-4. Wait one interval (or disable/enable the input). Confirm `index=zentra_validate sourcetype=zentra:reading` has events before trusting totals.
+   - Open `validate` (or create it). Set the API token. Set **Index** to `zentra_validate` (not `main`). Keep `device_sns = z6-30302`.
+   - Disable, save, then enable to force a poll. Wait about a minute.
+5. In the app, open **Collection Status**. It searches every index plus `index=_internal zentra_weather`. If readings landed in `main`, change the input's Index and poll again.
 
 The default input stanza is **disabled** until you add a token. Never put tokens in `default/`.
+
+If Collection Status is empty, run these in Search (All time):
+
+```
+index=* (sourcetype=zentra:reading OR source=zentra_weather://*)
+index=_internal zentra_weather
+```
 
 ## Validate 15-minute numbers against ZENTRA Cloud
 

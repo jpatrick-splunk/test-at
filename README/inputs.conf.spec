@@ -21,3 +21,12 @@ lookback_hours = <value>
 per_page = <value>
 * Readings per API page. Maximum 2000.
 * Default: 2000
+
+index = <value>
+* Splunk index that receives the 15-minute readings.
+* Default: zentra_validate
+* Create this index under Settings → Indexes before enabling the input.
+* If the index does not exist, Splunk drops the events and searches stay empty.
+
+interval = <value>
+* Seconds between polls. Default 60 during validation. ZENTRA allows one call per device per minute.

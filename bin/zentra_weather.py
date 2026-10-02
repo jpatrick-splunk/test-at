@@ -39,8 +39,8 @@ SCHEME = """<scheme>
             </arg>
             <arg name="api_token">
                 <title>ZENTRA Cloud API token</title>
-                <description>Personal API token from ZENTRA Cloud. Stored by Splunk; alternatively set ZENTRA_API_TOKEN. Never commit tokens to source control.</description>
-                <required_on_create>false</required_on_create>
+                <description>Personal API token from ZENTRA Cloud. Stored by Splunk; alternatively set ZENTRA_API_TOKEN. Never commit tokens to source control. Required for the input to poll.</description>
+                <required_on_create>true</required_on_create>
                 <required_on_edit>false</required_on_edit>
             </arg>
             <arg name="api_base_url">
@@ -112,10 +112,23 @@ def _run_stanza(stanza, checkpoint_dir: str) -> int:
         settings = stanza_settings(stanza)
     except ConfigError as exc:
         log("skipping %s: %s" % (stanza.name, exc))
+        log(
+            "open the input in Settings → Data inputs → ZENTRA Cloud Weather "
+            "and set API token plus index=zentra_validate"
+        )
         return 0
 
     total = 0
     devices: List[str] = settings["device_sns"]
+    log(
+        "running %s devices=%s index=%s sourcetype=%s token=set"
+        % (
+            stanza.name,
+            ",".join(devices),
+            settings["index"],
+            settings["sourcetype"],
+        )
+    )
     for index, device_sn in enumerate(devices):
         if index:
             # One call per device per minute.
@@ -161,14 +174,14 @@ def _poll_device(stanza_name: str, device_sn: str, settings: dict, checkpoint_di
             start_mrid=start_mrid,
             per_page=int(settings["per_page"]),
         )
-        for payload in pages:
+        for page_num, payload in enumerate(pages, 1):
             measurement_map, location_history = extract_measurement_map(payload)
             if not measurement_map:
                 keys = sorted(payload.keys()) if isinstance(payload, dict) else [type(payload).__name__]
                 data_obj = payload.get("data") if isinstance(payload, dict) else None
                 log(
-                    "no measurements parsed for %s; top-level keys=%s data_type=%s"
-                    % (device_sn, keys, type(data_obj).__name__)
+                    "no measurements parsed for %s page %s; top-level keys=%s data_type=%s"
+                    % (device_sn, page_num, keys, type(data_obj).__name__)
                 )
             events = flatten_readings(
                 measurement_map,
@@ -176,6 +189,7 @@ def _poll_device(stanza_name: str, device_sn: str, settings: dict, checkpoint_di
                 device_sn_fallback=device_sn,
                 min_mrid=min_mrid,
             )
+            page_emitted = 0
             for event in events:
                 write_event(
                     event,
@@ -186,12 +200,24 @@ def _poll_device(stanza_name: str, device_sn: str, settings: dict, checkpoint_di
                     host=settings.get("host") or None,
                 )
                 emitted += 1
+                page_emitted += 1
                 mrid = event.get("mrid")
                 ts = event.get("timestamp_utc")
                 if mrid is not None:
                     max_mrid = mrid if max_mrid is None else max(int(max_mrid), int(mrid))
                 if ts is not None:
                     max_ts = ts if max_ts is None else max(int(max_ts), int(ts))
+            log(
+                "device %s page %s measurements=%s events=%s total_emitted=%s index=%s"
+                % (
+                    device_sn,
+                    page_num,
+                    len(measurement_map),
+                    page_emitted,
+                    emitted,
+                    settings["index"],
+                )
+            )
     except Exception as exc:
         log("poll failed for %s: %s" % (device_sn, exc))
         log(traceback.format_exc())

@@ -70,13 +70,16 @@ class RunTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             xml = RUN_XML_TEMPLATE.format(checkpoint_dir=tmp, devices="z6-30302")
             stdout = io.StringIO()
+            stderr = io.StringIO()
             with patch("zentra_weather.iter_readings_pages", return_value=[FIXTURE]), patch(
                 "zentra_weather.start_stream"
             ), patch("zentra_weather.end_stream"), patch(
                 "zentra_weather.write_event"
-            ) as write_event, patch("sys.stdout", stdout):
+            ) as write_event, patch("sys.stdout", stdout), patch("sys.stderr", stderr):
                 rc = mi.run(xml)
             self.assertEqual(rc, 0)
+            self.assertIn("index=zentra_validate", stderr.getvalue())
+            self.assertIn("token=set", stderr.getvalue())
             self.assertEqual(write_event.call_count, 9)
             first = write_event.call_args_list[0].kwargs.get("data") or write_event.call_args_list[0][0][0]
             if not isinstance(first, dict):
@@ -143,6 +146,7 @@ class AppPackagingTests(unittest.TestCase):
             app / "default" / "datamodels.conf",
             app / "default" / "data" / "models" / "Weather.json",
             app / "default" / "data" / "ui" / "nav" / "default.xml",
+            app / "default" / "data" / "ui" / "views" / "collection_status.xml",
             app / "default" / "data" / "ui" / "views" / "rainfall_totals.xml",
             app / "default" / "data" / "ui" / "views" / "reading_validation.xml",
             app / "default" / "data" / "ui" / "views" / "weather_overview.xml",
@@ -164,6 +168,7 @@ class AppPackagingTests(unittest.TestCase):
         for name in ("device_sn", "air_temperature", "wind_speed", "precipitation", "error_flag"):
             self.assertIn(name, field_names)
         for view in (
+            "collection_status.xml",
             "rainfall_totals.xml",
             "reading_validation.xml",
             "weather_overview.xml",
