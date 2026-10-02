@@ -48,16 +48,23 @@ index=_internal zentra_weather
 
 ## Collection stopped after 9/23
 
-If Splunk still has readings through `2026-09-23 23:45:00-05:00` (`mrid` 59781) and ZENTRA Cloud is current, the poller asked for `start_mrid` after the first dump. The dataframe API returns little or nothing for that, so nothing after 23:45 was indexed.
+The logger is current on ZENTRA Cloud. Splunk stopped at `2026-09-23 23:45:00-05:00` (`mrid` 59781). Two poller mistakes caused that:
 
-This revision always requests `start_date`/`end_date` from the last logger datetime (that 23:45 sample) through now. Do **not** delete the 9/23 events.
+1. After the first dump it asked for `start_mrid`, which the dataframe API does not fill.
+2. **Ignore checkpoint = true** re-requests 30 days from the **oldest** end. ZENTRA `per_page` is 2000 *readings* (~20 days). Page 1 is already-indexed September data; `next_url` stays set even on empty pages. Nothing after 23:45 is indexed.
+
+This revision always resumes from that 23:45 sample with `start_date`/`end_date`, even when Ignore checkpoint is on. Do **not** delete the 9/23 events.
 
 ```
 cd /Applications/Splunk/etc/apps/zentra
 git pull
 ```
 
-Restart Splunk. In **Settings → Data inputs → ZENTRA Cloud Weather → validate**, keep **Ignore checkpoint** unchecked and **Interval** at 900. Disable, save, then enable `validate` once.
+Restart Splunk. In **Settings → Data inputs → ZENTRA Cloud Weather → validate**:
+
+- Set **Ignore checkpoint** to **false** (unchecked). Leave it off.
+- **Interval** `900`.
+- Disable, save, then enable `validate` once.
 
 Confirm catch-up (All time):
 
@@ -65,10 +72,10 @@ Confirm catch-up (All time):
 index=zentra_validate sourcetype=zentra:reading device_sn=z6-30302
 | stats max(datetime) as last_datetime max(mrid) as last_mrid
 
-index=_internal zentra_weather (window= OR lag_hours= OR catch-up)
+index=_internal zentra_weather (window= OR lag_hours= OR catch-up OR page_num_readings)
 ```
 
-`last_datetime` should move past 9/23 toward now. Logs should show `window=catch-up` and `start_date=2026-09-24 04:30:00`, not `start_mrid`.
+`last_datetime` should move past `2026-09-23 23:45:00-05:00` toward now. Logs should show `window=catch-up`, `page_end` on 10/02, and `start_date=2026-09-24 04:30:00`, not a 30-day lookback.
 
 ## Validate 15-minute numbers against ZENTRA Cloud
 

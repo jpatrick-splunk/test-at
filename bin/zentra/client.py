@@ -190,6 +190,14 @@ def iter_readings_pages(
 def next_page_number(payload: Dict[str, Any], current_page: int, per_page: int) -> Optional[int]:
     pagination = payload.get("pagination") if isinstance(payload, dict) else None
     if isinstance(pagination, dict):
+        # v4 per_page counts device readings (timestamps / MRIDs), not long-format
+        # dataframe rows. One 9-day page was 833 readings and 24157 output rows.
+        # next_url stays set on empty pages (page_num_readings=0) — do not follow it.
+        reading_count = _pagination_int(pagination.get("page_num_readings"))
+        if reading_count is not None:
+            if reading_count < int(per_page):
+                return None
+            return current_page + 1
         for key in ("next_page", "next_page_num", "next"):
             value = pagination.get(key)
             if isinstance(value, int) and value > current_page:
@@ -210,8 +218,12 @@ def next_page_number(payload: Dict[str, Any], current_page: int, per_page: int) 
     # Count dataframe rows, not exploded cells. A long-format table has one
     # reading per row (measurement, value, units, …); a wide table has one
     # timestamp per row. Either way the API's per_page applies to those rows.
+    # Long-format output rows are not device readings — do not page on them.
     row_count = _payload_split_row_count(payload)
     if row_count is not None:
+        columns = _split_table_column_names(payload)
+        if columns and ("measurement" in columns or "measurement_name" in columns):
+            return None
         return current_page + 1 if row_count == per_page else None
 
     measurement_map, _ = extract_measurement_map(payload)
@@ -219,6 +231,27 @@ def next_page_number(payload: Dict[str, Any], current_page: int, per_page: int) 
     if reading_count == per_page:
         return current_page + 1
     return None
+
+
+def _pagination_int(value: Any) -> Optional[int]:
+    if value is None or isinstance(value, bool):
+        return None
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return None
+
+
+def _split_table_column_names(payload: Any) -> List[str]:
+    payload = _coerce_json_container(payload)
+    candidates: List[Any] = [payload]
+    if isinstance(payload, dict) and "data" in payload:
+        candidates.append(_coerce_json_container(payload.get("data")))
+    for obj in candidates:
+        table = _as_split_table(obj)
+        if table is not None:
+            return [str(col).strip().lower() for col in table[0]]
+    return []
 
 
 def extract_measurement_map(payload: Any) -> Tuple[Dict[str, Any], List[Dict[str, Any]]]:

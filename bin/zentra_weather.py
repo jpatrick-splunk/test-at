@@ -64,7 +64,7 @@ SCHEME = """<scheme>
             </arg>
             <arg name="ignore_checkpoint">
                 <title>Ignore checkpoint (full date-range pull)</title>
-                <description>If true, request a full lookback date range instead of starting at the last logger datetime. Already-indexed samples are still skipped. Default false. Do not leave this on — it is only for a one-time backfill.</description>
+                <description>Leave this false. If a last logger datetime exists, the poller always resumes from that sample — even when this is true. A 30-day dump from the oldest end never reaches new 15-minute samples (ZENTRA per_page counts readings, 1 call/device/min). Already-indexed samples are always skipped.</description>
                 <required_on_create>false</required_on_create>
                 <required_on_edit>false</required_on_edit>
             </arg>
@@ -184,19 +184,24 @@ def _poll_device(stanza_name: str, device_sn: str, settings: dict, checkpoint_di
             "checkpoint %s last_mrid=%s last_datetime=%s lag_hours=%.1f"
             % (device_sn, min_mrid, last_dt.strftime("%Y-%m-%d %H:%M:%S"), lag_hours)
         )
-    # The v4 dataframe API is a start_date/end_date dump. start_mrid returns
-    # little or nothing, which froze collection after the first successful pull
-    # (last sample 2026-09-23 23:45:00-05:00, mrid 59781 on z6-30302).
     end_dt = now
-    if ignore_ckpt or last_ts is None:
-        start_dt = end_dt - timedelta(hours=lookback)
-        window = "lookback"
-    elif int(last_ts) < now_ts - 900:
+    if last_ts is not None:
+        # Always resume from the last logger datetime. ignore_checkpoint=1 used
+        # to request now-720h; page 1 is the oldest ~2000 readings (already
+        # indexed through 2026-09-23 23:45) and next_url stays set on empty
+        # pages, so nothing after 9/23 was indexed.
         start_dt = datetime.fromtimestamp(int(last_ts) - 900, tz=timezone.utc)
+        if start_dt >= end_dt:
+            start_dt = end_dt - timedelta(seconds=900)
         window = "catch-up" if lag_hours is not None and lag_hours > 24 else "incremental"
+        if ignore_ckpt:
+            log(
+                "ignore_checkpoint=1 on %s with existing checkpoint last_mrid=%s; "
+                "resuming from last logger datetime, not a 30-day dump from the oldest end. "
+                "Set Ignore checkpoint to false."
+                % (device_sn, min_mrid)
+            )
         if lag_hours is not None and lag_hours > 48:
-            # Fill a multi-day gap by logger datetime only. MRIDs do not resume
-            # collection on the df path.
             min_mrid = None
             log(
                 "checkpoint %s is %.1f hours behind; catch-up start_date=%s without skip_mrid"
@@ -205,11 +210,11 @@ def _poll_device(stanza_name: str, device_sn: str, settings: dict, checkpoint_di
     else:
         start_dt = end_dt - timedelta(hours=lookback)
         window = "lookback"
-    if ignore_ckpt:
-        log(
-            "ignore_checkpoint=1 on %s: lookback pull, skipping mrid<=%s ts<=%s"
-            % (device_sn, min_mrid, min_ts)
-        )
+        if ignore_ckpt:
+            log(
+                "ignore_checkpoint=1 on %s: lookback pull, skipping mrid<=%s ts<=%s"
+                % (device_sn, min_mrid, min_ts)
+            )
 
     emitted = 0
     max_mrid = last_mrid
@@ -234,8 +239,26 @@ def _poll_device(stanza_name: str, device_sn: str, settings: dict, checkpoint_di
             output_format=output_format,
         )
         window_emitted = 0
+        had_readings = False
         for page_num, payload in enumerate(pages, 1):
+            pagination = payload.get("pagination") if isinstance(payload, dict) else None
+            if isinstance(pagination, dict):
+                log(
+                    "device %s page %s page_num_readings=%s page_num_outputs=%s "
+                    "page_start=%s page_end=%s max_mrid=%s"
+                    % (
+                        device_sn,
+                        page_num,
+                        pagination.get("page_num_readings"),
+                        pagination.get("page_num_outputs"),
+                        pagination.get("page_start_date"),
+                        pagination.get("page_end_date"),
+                        pagination.get("max_mrid"),
+                    )
+                )
             measurement_map, location_history = extract_measurement_map(payload)
+            if measurement_map:
+                had_readings = True
             if not measurement_map:
                 keys = sorted(payload.keys()) if isinstance(payload, dict) else [type(payload).__name__]
                 data_obj = payload.get("data") if isinstance(payload, dict) else None
@@ -303,11 +326,16 @@ def _poll_device(stanza_name: str, device_sn: str, settings: dict, checkpoint_di
                         reading_skip_summary(measurement_map, min_mrid=min_mrid),
                     )
                 )
-        return window_emitted
+        return window_emitted, had_readings
 
     try:
-        got = emit_window(start_dt, end_dt, min_mrid, min_ts, window)
-        if got == 0 and window in ("incremental", "catch-up") and not ignore_ckpt:
+        got, had_readings = emit_window(start_dt, end_dt, min_mrid, min_ts, window)
+        if (
+            got == 0
+            and not had_readings
+            and window in ("incremental", "catch-up")
+            and not ignore_ckpt
+        ):
             log(
                 "device %s incremental window emitted 0; retrying %sh lookback from logger datetime"
                 % (device_sn, lookback)

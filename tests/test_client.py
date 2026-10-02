@@ -129,9 +129,58 @@ class ClientTests(unittest.TestCase):
                         [1720000000 + i, "Precipitation", 0.1, 46.75] for i in range(2000)
                     ],
                 }
-            )
+            ),
+            "pagination": {
+                "per_page": 2000,
+                "page_num": 1,
+                "page_num_readings": 2000,
+                "page_num_outputs": 2000,
+                "next_url": "https://zentracloud.com/api/v4/get_readings/?page_num=2",
+            },
         }
         self.assertEqual(next_page_number(payload, 1, 2000), 2)
+
+    def test_long_format_output_rows_are_not_readings(self):
+        payload = {
+            "data": json.dumps(
+                {
+                    "columns": ["timestamp_utc", "measurement", "value", "latitude"],
+                    "data": [
+                        [1720000000 + i, "Precipitation", 0.1, 46.75] for i in range(2000)
+                    ],
+                }
+            )
+        }
+        self.assertIsNone(next_page_number(payload, 1, 2000))
+
+    def test_page_num_readings_short_page_ignores_next_url(self):
+        payload = {
+            "data": "{}",
+            "pagination": {
+                "per_page": 2000,
+                "page_num": 1,
+                "page_num_readings": 833,
+                "page_num_outputs": 24157,
+                "next_url": "https://zentracloud.com/api/v4/get_readings/?page_num=2",
+                "page_start_date": "2026-09-23 23:30:00-05:00",
+                "page_end_date": "2026-10-02 15:30:00-05:00",
+                "max_mrid": 60612,
+            },
+        }
+        self.assertIsNone(next_page_number(payload, 1, 2000))
+
+    def test_empty_page_with_next_url_stops(self):
+        payload = {
+            "data": {},
+            "pagination": {
+                "per_page": 2000,
+                "page_num": 2,
+                "page_num_readings": 0,
+                "page_num_outputs": 0,
+                "next_url": "https://zentracloud.com/api/v4/get_readings/?page_num=3",
+            },
+        }
+        self.assertIsNone(next_page_number(payload, 2, 2000))
 
     def test_long_format_partial_page_stops(self):
         payload = {

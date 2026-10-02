@@ -165,6 +165,48 @@ class RunTests(unittest.TestCase):
             self.assertIn("last_mrid=59781", logs)
             self.assertIn("without skip_mrid", logs)
 
+    def test_ignore_checkpoint_with_stale_ckpt_resumes_from_last_datetime(self):
+        last_ts = 1790225100
+        with tempfile.TemporaryDirectory() as tmp:
+            ckpt_dir = Path(tmp, "zentra_weather_validate")
+            ckpt_dir.mkdir()
+            (ckpt_dir / "z6-30302.json").write_text(
+                json.dumps(
+                    {
+                        "last_mrid": 59781,
+                        "last_timestamp_utc": last_ts,
+                        "device_sn": "z6-30302",
+                    }
+                ),
+                encoding="utf-8",
+            )
+            xml = RUN_XML_TEMPLATE.format(checkpoint_dir=tmp, devices="z6-30302").replace(
+                "<param name=\"ignore_checkpoint\">0</param>",
+                "<param name=\"ignore_checkpoint\">1</param>",
+            )
+
+            class FrozenDateTime(datetime):
+                @classmethod
+                def now(cls, tz=None):
+                    aware = datetime(2026, 10, 2, 20, 0, tzinfo=timezone.utc)
+                    return aware if tz is None else aware.astimezone(tz)
+
+            stderr = io.StringIO()
+            with patch("zentra_weather.datetime", FrozenDateTime), patch(
+                "time.sleep"
+            ), patch(
+                "zentra_weather.iter_readings_pages", return_value=[FIXTURE]
+            ) as pages, patch("zentra_weather.start_stream"), patch(
+                "zentra_weather.end_stream"
+            ), patch("zentra_weather.write_event"), patch("sys.stderr", stderr):
+                mi.run(xml)
+            kwargs = pages.call_args_list[0].kwargs
+            self.assertIsNone(kwargs.get("start_mrid"))
+            self.assertEqual(kwargs.get("start_date"), "2026-09-24 04:30:00")
+            logs = stderr.getvalue()
+            self.assertIn("resuming from last logger datetime", logs)
+            self.assertNotIn("window=lookback ", logs)
+
     def test_ignore_checkpoint_still_skips_already_indexed(self):
         with tempfile.TemporaryDirectory() as tmp:
             ckpt_dir = Path(tmp, "zentra_weather_validate")
