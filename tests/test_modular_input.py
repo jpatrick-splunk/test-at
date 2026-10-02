@@ -117,14 +117,22 @@ class RunTests(unittest.TestCase):
                 mi.run(xml)
             self.assertEqual(write_event.call_count, 4)
             kwargs = pages.call_args.kwargs
-            self.assertEqual(kwargs["start_mrid"], 101)
+            self.assertIsNone(kwargs.get("start_mrid"))
+            self.assertIsNotNone(kwargs.get("start_date"))
+            self.assertIsNotNone(kwargs.get("end_date"))
 
     def test_ignore_checkpoint_still_skips_already_indexed(self):
         with tempfile.TemporaryDirectory() as tmp:
             ckpt_dir = Path(tmp, "zentra_weather_validate")
             ckpt_dir.mkdir()
             (ckpt_dir / "z6-30302.json").write_text(
-                json.dumps({"last_mrid": 101, "last_timestamp_utc": 1720000900, "device_sn": "z6-30302"}),
+                json.dumps(
+                    {
+                        "last_mrid": 101,
+                        "last_timestamp_utc": 2000000000,
+                        "device_sn": "z6-30302",
+                    }
+                ),
                 encoding="utf-8",
             )
             xml = RUN_XML_TEMPLATE.format(checkpoint_dir=tmp, devices="z6-30302").replace(

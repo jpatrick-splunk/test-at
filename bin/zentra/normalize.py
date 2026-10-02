@@ -338,11 +338,20 @@ def _checkpoint_skip(
     min_mrid: Optional[int],
     min_timestamp_utc: Optional[int],
 ) -> bool:
-    """True when this sample was already indexed on a previous poll."""
+    """True when this sample was already indexed on a previous poll.
+
+    When both MRID and timestamp checkpoints exist, skip only if *both* are
+    old. A newer logger datetime must be indexed even if MRID did not move
+    (the df path does not support start_mrid well).
+    """
+    mrid_old = mrid is not None and min_mrid is not None and int(mrid) <= int(min_mrid)
+    ts_old = min_timestamp_utc is not None and ts is not None and int(ts) <= int(min_timestamp_utc)
+    if mrid is not None and min_mrid is not None and ts is not None and min_timestamp_utc is not None:
+        return bool(mrid_old and ts_old)
     if mrid is not None and min_mrid is not None:
-        return int(mrid) <= int(min_mrid)
-    if min_timestamp_utc is not None and ts is not None:
-        return int(ts) <= int(min_timestamp_utc)
+        return bool(mrid_old)
+    if ts_old:
+        return True
     return False
 
 

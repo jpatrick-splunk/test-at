@@ -442,6 +442,25 @@ class NormalizeTests(unittest.TestCase):
         events = flatten_readings(mapping)
         self.assertEqual(len(events), 1)
 
+    def test_newer_datetime_not_skipped_for_old_mrid(self):
+        mapping = {
+            "Precipitation": [
+                {
+                    "metadata": {"units": "mm"},
+                    "readings": [
+                        {
+                            "datetime": "2026-10-01 12:00:00-05:00",
+                            "value": 0.3,
+                            "mrid": 5,
+                        }
+                    ],
+                }
+            ]
+        }
+        events = flatten_readings(mapping, min_mrid=100, min_timestamp_utc=1000)
+        self.assertEqual(len(events), 1)
+        self.assertEqual(events[0]["value"], 0.3)
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -64,7 +64,7 @@ SCHEME = """<scheme>
             </arg>
             <arg name="ignore_checkpoint">
                 <title>Ignore checkpoint (full date-range pull)</title>
-                <description>If true, request start_date/end_date for the lookback window instead of start_mrid. Already-indexed MRIDs and timestamps are still skipped. Leave false after the first successful pull so polls stay incremental. Default false.</description>
+                <description>If true, request a full lookback date range instead of starting at the last logger datetime. Already-indexed samples are still skipped. Default false. Do not leave this on — it is only for a one-time backfill.</description>
                 <required_on_create>false</required_on_create>
                 <required_on_edit>false</required_on_edit>
             </arg>
@@ -170,54 +170,53 @@ def _poll_device(stanza_name: str, device_sn: str, settings: dict, checkpoint_di
     ckpt = load_checkpoint(checkpoint_dir, device_sn, namespace=stanza_name)
     last_mrid = ckpt.get("last_mrid")
     last_ts = ckpt.get("last_timestamp_utc")
-    # Always skip already-indexed samples, even on a date-range pull. Otherwise
-    # ignore_checkpoint=1 plus a 60s interval re-indexes the same 30 days.
     min_mrid = int(last_mrid) if last_mrid is not None else None
     min_ts = int(last_ts) if last_ts is not None else None
-    start_mrid = None if ignore_ckpt else (int(last_mrid) + 1 if last_mrid is not None else None)
-    start_date = end_date = None
     lookback = int(settings["lookback_hours"])
     output_format = settings.get("output_format") or "df"
+    now = datetime.now(timezone.utc)
+    now_ts = int(now.timestamp())
+    # The v4 dataframe API is a start_date/end_date dump. start_mrid returns
+    # little or nothing, which froze collection after the first successful pull.
+    end_dt = now
+    if ignore_ckpt or last_ts is None:
+        start_dt = end_dt - timedelta(hours=lookback)
+        window = "lookback"
+    elif int(last_ts) < now_ts - 900:
+        start_dt = datetime.fromtimestamp(int(last_ts) - 900, tz=timezone.utc)
+        window = "incremental"
+    else:
+        start_dt = end_dt - timedelta(hours=lookback)
+        window = "lookback"
     if ignore_ckpt:
         log(
-            "ignore_checkpoint=1 on %s: requesting lookback but skipping mrid<=%s ts<=%s. "
-            "Set ignore_checkpoint=0 after the first pull to avoid duplicate events."
+            "ignore_checkpoint=1 on %s: lookback pull, skipping mrid<=%s ts<=%s"
             % (device_sn, min_mrid, min_ts)
-        )
-    # Official v4 docs: use start_date/end_date OR start_mrid/end_mrid, not both.
-    if start_mrid is None:
-        end_dt = datetime.now(timezone.utc)
-        if (not ignore_ckpt) and last_ts is not None:
-            start_dt = datetime.fromtimestamp(int(last_ts), tz=timezone.utc)
-        else:
-            start_dt = end_dt - timedelta(hours=lookback)
-        start_date = start_dt.strftime("%Y-%m-%d %H:%M:%S")
-        end_date = end_dt.strftime("%Y-%m-%d %H:%M:%S")
-        log(
-            "polling %s start_date=%s end_date=%s format=%s lookback=%sh"
-            % (device_sn, start_date, end_date, output_format, lookback)
-        )
-    else:
-        log(
-            "polling %s from mrid %s format=%s"
-            % (device_sn, start_mrid, output_format)
         )
 
     emitted = 0
     max_mrid = last_mrid
     max_ts = last_ts
 
-    try:
+    def emit_window(start_dt, end_dt, min_mrid, min_ts, label):
+        nonlocal emitted, max_mrid, max_ts
+        start_date = start_dt.strftime("%Y-%m-%d %H:%M:%S")
+        end_date = end_dt.strftime("%Y-%m-%d %H:%M:%S")
+        log(
+            "polling %s window=%s start_date=%s end_date=%s format=%s skip_mrid<=%s skip_ts<=%s"
+            % (device_sn, label, start_date, end_date, output_format, min_mrid, min_ts)
+        )
         pages = iter_readings_pages(
             api_base_url=settings["api_base_url"],
             token=settings["api_token"],
             device_sn=device_sn,
             start_date=start_date,
             end_date=end_date,
-            start_mrid=start_mrid,
+            start_mrid=None,
             per_page=int(settings["per_page"]),
             output_format=output_format,
         )
+        window_emitted = 0
         for page_num, payload in enumerate(pages, 1):
             measurement_map, location_history = extract_measurement_map(payload)
             if not measurement_map:
@@ -246,6 +245,7 @@ def _poll_device(stanza_name: str, device_sn: str, settings: dict, checkpoint_di
                 )
                 emitted += 1
                 page_emitted += 1
+                window_emitted += 1
                 mrid = event.get("mrid")
                 ts = event.get("timestamp_utc")
                 if mrid is not None:
@@ -286,11 +286,27 @@ def _poll_device(stanza_name: str, device_sn: str, settings: dict, checkpoint_di
                         reading_skip_summary(measurement_map, min_mrid=min_mrid),
                     )
                 )
+        return window_emitted
+
+    try:
+        got = emit_window(start_dt, end_dt, min_mrid, min_ts, window)
+        if got == 0 and window == "incremental" and not ignore_ckpt:
+            log(
+                "device %s incremental window emitted 0; retrying %sh lookback from logger datetime"
+                % (device_sn, lookback)
+            )
+            import time as _time
+
+            _time.sleep(DEVICE_CALL_GAP_SECONDS)
+            retry_start = now - timedelta(hours=lookback)
+            stale_logger = last_ts is not None and int(last_ts) < now_ts - 2 * 86400
+            retry_min_ts = int(last_ts) if stale_logger else None
+            emit_window(retry_start, now, None, retry_min_ts, "lookback-retry")
     except Exception as exc:
         log("poll failed for %s: %s" % (device_sn, exc))
         log(traceback.format_exc())
 
-    if emitted or max_mrid != last_mrid:
+    if emitted or max_mrid != last_mrid or max_ts != last_ts:
         save_checkpoint(
             checkpoint_dir,
             device_sn,
