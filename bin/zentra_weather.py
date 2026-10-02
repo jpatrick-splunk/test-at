@@ -21,7 +21,7 @@ from zentra.config import (
     parse_input_xml,
     stanza_settings,
 )
-from zentra.normalize import flatten_readings
+from zentra.normalize import describe_measurement_map, flatten_readings
 from zentra.stream import end_stream, start_stream, write_event
 
 SCHEME = """<scheme>
@@ -227,6 +227,11 @@ def _poll_device(stanza_name: str, device_sn: str, settings: dict, checkpoint_di
                     settings["index"],
                 )
             )
+            if measurement_map and page_emitted == 0:
+                log(
+                    "parsed measurement names but no sample rows for %s: %s"
+                    % (device_sn, describe_measurement_map(measurement_map))
+                )
     except Exception as exc:
         log("poll failed for %s: %s" % (device_sn, exc))
         log(traceback.format_exc())

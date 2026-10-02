@@ -10,7 +10,7 @@ import urllib.parse
 import urllib.request
 from typing import Any, Callable, Dict, Iterator, List, Optional, Tuple
 
-from zentra import DEFAULT_API_BASE_URL
+from zentra.normalize import entry_readings
 
 READINGS_PATH = "/api/v4/get_readings/"
 USER_AGENT = "zentra_weather/1.1 (Splunk modular input)"
@@ -341,13 +341,11 @@ def count_readings(measurement_map: Dict[str, Any]) -> int:
     total = 0
     for entries in measurement_map.values():
         if not isinstance(entries, list):
-            continue
+            entries = [entries]
         for entry in entries:
             if not isinstance(entry, dict):
                 continue
-            readings = entry.get("readings") or entry.get("values") or []
-            if isinstance(readings, list):
-                total = max(total, len(readings))
+            total = max(total, len(entry_readings(entry)))
     return total
 
 
@@ -379,10 +377,10 @@ def _as_measurement_map(payload: Any) -> Optional[Dict[str, Any]]:
             sample = value[0]
             if "measurement" in sample or "measurement_name" in sample:
                 continue
-            if "metadata" in sample or "readings" in sample or "values" in sample:
+            if "metadata" in sample or "readings" in sample or "values" in sample or "data" in sample:
                 looks_mapped += 1
         elif isinstance(value, dict) and (
-            "readings" in value or "metadata" in value or "values" in value
+            "readings" in value or "metadata" in value or "values" in value or "data" in value
         ):
             looks_mapped += 1
     if looks_mapped == 0:

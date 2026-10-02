@@ -196,6 +196,39 @@ class NormalizeTests(unittest.TestCase):
         later = location_at(history, 400)
         self.assertEqual(later["latitude"], 3.0)
 
+    def test_columnar_readings_become_interval_events(self):
+        mapping = {
+            "Precipitation": [
+                {
+                    "metadata": {"device_sn": "z6-30302", "units": "mm"},
+                    "readings": {
+                        "timestamp_utc": [1720000000, 1720000900],
+                        "value": [0.2, 0.4],
+                        "mrid": [100, 101],
+                    },
+                }
+            ]
+        }
+        events = flatten_readings(mapping, device_sn_fallback="z6-30302")
+        self.assertEqual(len(events), 2)
+        self.assertEqual(events[0]["value"], 0.2)
+        self.assertEqual(events[1]["value"], 0.4)
+        self.assertAlmostEqual(sum(e["value"] for e in events), 0.6)
+
+    def test_data_key_readings(self):
+        mapping = {
+            "Air Temperature": [
+                {
+                    "metadata": {"device_sn": "z6-30302", "units": "°C"},
+                    "data": [{"timestamp_utc": 1720000000, "value": 24.7, "mrid": 1}],
+                }
+            ]
+        }
+        events = flatten_readings(mapping)
+        self.assertEqual(len(events), 1)
+        self.assertEqual(events[0]["value"], 24.7)
+        self.assertEqual(events[0]["measurement"], "Air Temperature")
+
 
 if __name__ == "__main__":
     unittest.main()

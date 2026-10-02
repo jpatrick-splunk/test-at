@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import re
 from datetime import datetime, timezone
 from typing import Any, Dict, Iterable, List, Optional, Tuple
@@ -132,6 +133,150 @@ def location_at(
     return chosen
 
 
+READING_LIST_KEYS = (
+    "readings",
+    "values",
+    "data",
+    "series",
+    "points",
+    "samples",
+    "records",
+)
+
+
+def entry_readings(entry: Dict[str, Any]) -> List[Dict[str, Any]]:
+    """Return sample rows from a ZENTRA measurement entry.
+
+    ZENTRA Cloud json may use a list of reading objects, a ``data`` list, or a
+    columnar dict of parallel arrays. Metadata-only entries yield no rows.
+    """
+    if not isinstance(entry, dict):
+        return []
+    for key in READING_LIST_KEYS:
+        if key not in entry:
+            continue
+        rows = _coerce_reading_list(entry.get(key))
+        if rows:
+            return rows
+    if _reading_timestamp(entry) is not None and "value" in entry:
+        return [entry]
+    return []
+
+
+def describe_measurement_map(measurement_map: Dict[str, Any]) -> str:
+    """Short diagnostic for why flatten might emit zero events."""
+    if not measurement_map:
+        return "empty-map"
+    name, entries = next(iter(measurement_map.items()))
+    if not isinstance(entries, list):
+        entries = [entries]
+    entry = entries[0] if entries else None
+    if not isinstance(entry, dict):
+        return "measurement=%s entry_type=%s" % (name, type(entry).__name__)
+    raw = None
+    raw_key = None
+    for key in READING_LIST_KEYS:
+        if key in entry:
+            raw = entry.get(key)
+            raw_key = key
+            break
+    rows = entry_readings(entry)
+    return (
+        "measurement=%s entry_keys=%s sample_key=%s sample_type=%s "
+        "sample_len=%s parsed_rows=%s"
+        % (
+            name,
+            sorted(entry.keys()),
+            raw_key,
+            type(raw).__name__,
+            len(raw) if isinstance(raw, (list, dict)) else None,
+            len(rows),
+        )
+    )
+
+
+def _coerce_reading_list(raw: Any) -> List[Dict[str, Any]]:
+    if isinstance(raw, (bytes, bytearray)):
+        try:
+            raw = raw.decode("utf-8")
+        except UnicodeDecodeError:
+            return []
+    if isinstance(raw, str):
+        text = raw.strip()
+        if text[:1] in "{[":
+            try:
+                raw = json.loads(text)
+            except ValueError:
+                return []
+        else:
+            return []
+    if isinstance(raw, dict):
+        if "columns" in raw and "data" in raw:
+            return []
+        for key in READING_LIST_KEYS:
+            if key in raw:
+                inner = _coerce_reading_list(raw.get(key))
+                if inner:
+                    return inner
+        columnar = _columnar_to_readings(raw)
+        if columnar:
+            return columnar
+        if _reading_timestamp(raw) is not None and "value" in raw:
+            return [raw]
+        return []
+    if not isinstance(raw, list) or not raw:
+        return []
+    if all(isinstance(item, dict) for item in raw):
+        return [item for item in raw if isinstance(item, dict)]
+    rows = []
+    for item in raw:
+        if isinstance(item, dict):
+            rows.append(item)
+        elif isinstance(item, (list, tuple)) and item:
+            rows.append(_sequence_to_reading(item))
+    return rows
+
+
+def _columnar_to_readings(obj: Dict[str, Any]) -> List[Dict[str, Any]]:
+    lists = {key: value for key, value in obj.items() if isinstance(value, list)}
+    time_key = None
+    for key in ("timestamp_utc", "timestamp", "timestamps", "time", "datetime"):
+        if key in lists:
+            time_key = key
+            break
+    if time_key is None or not lists[time_key]:
+        return []
+    count = len(lists[time_key])
+    rows: List[Dict[str, Any]] = []
+    for index in range(count):
+        reading: Dict[str, Any] = {}
+        for key, values in lists.items():
+            if index < len(values):
+                reading[key] = values[index]
+        if "timestamp_utc" not in reading:
+            if reading.get("timestamp") is not None:
+                reading["timestamp_utc"] = reading.get("timestamp")
+            elif reading.get("timestamps") is not None:
+                reading["timestamp_utc"] = reading.get("timestamps")
+        if "value" not in reading and "values" in reading:
+            reading["value"] = reading.get("values")
+        if "mrid" not in reading and reading.get("reading_id") is not None:
+            reading["mrid"] = reading.get("reading_id")
+        rows.append(reading)
+    return rows
+
+
+def _sequence_to_reading(row: Any) -> Dict[str, Any]:
+    reading: Dict[str, Any] = {}
+    if len(row) >= 1:
+        reading["timestamp_utc"] = row[0]
+    if len(row) >= 2:
+        reading["value"] = row[1]
+    if len(row) >= 3:
+        reading["mrid"] = row[2]
+    return reading
+
+
 def flatten_readings(
     measurement_map: Dict[str, Any],
     location_history: Optional[List[Dict[str, Any]]] = None,
@@ -159,9 +304,7 @@ def flatten_readings(
                 or entry.get("units")
                 or entry.get("unit")
             )
-            readings = entry.get("readings") or entry.get("values") or []
-            if not isinstance(readings, list):
-                continue
+            readings = entry_readings(entry)
             for reading in readings:
                 if not isinstance(reading, dict):
                     continue
@@ -235,9 +378,7 @@ def normalize_readings(
                 or entry.get("units")
                 or entry.get("unit")
             )
-            readings = entry.get("readings") or entry.get("values") or []
-            if not isinstance(readings, list):
-                continue
+            readings = entry_readings(entry)
             for reading in readings:
                 if not isinstance(reading, dict):
                     continue
