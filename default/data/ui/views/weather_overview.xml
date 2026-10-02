@@ -146,9 +146,10 @@
       <map>
         <title>Logger locations</title>
         <search>
-          <query>`zentra_weather_search` device_sn="$device_sn$"
-| stats latest(latitude) as latitude latest(longitude) as longitude latest(eval(if(measurement_canonical="air_temperature",value,null()))) as air_temperature by device_sn
-| geostats latfield=latitude longfield=longitude latest(air_temperature) as air_temperature by device_sn</query>
+          <query>`zentra_canonical(air_temperature)` device_sn="$device_sn$"
+| eval latitude=tonumber(coalesce(latitude, lat))
+| eval longitude=tonumber(coalesce(longitude, lon))
+| stats latest(latitude) as latitude latest(longitude) as longitude latest(value) as air_temperature latest(datetime) as datetime by device_sn</query>
           <earliest>$time.earliest$</earliest>
           <latest>$time.latest$</latest>
         </search>

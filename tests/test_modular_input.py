@@ -236,6 +236,9 @@ class AppPackagingTests(unittest.TestCase):
         validation = (app / "default" / "data" / "ui" / "views" / "reading_validation.xml").read_text()
         self.assertIn("`zentra_precip_rain`", validation)
         self.assertIn("| table datetime,", validation)
+        overview = (app / "default" / "data" / "ui" / "views" / "weather_overview.xml").read_text()
+        self.assertNotIn("geostats", overview)
+        self.assertIn("`zentra_canonical(air_temperature)`", overview)
 
     def test_default_inputs_have_no_token(self):
         text = (ROOT / "default" / "inputs.conf").read_text()
