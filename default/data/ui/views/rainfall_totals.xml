@@ -3,8 +3,7 @@
   <label>Rainfall Totals</label>
   <description>ZENTRA Cloud charts Precipitation as rainfall during each 15-minute interval (see https://zentracloud.com/#/dashboard_detail/z6-30302). This view leaves those interval samples unchanged and sums them into daily and weekly accumulation so customers can see how much rain fell over a day or week. Units match the logger account (typically mm).</description>
   <search id="precip_base">
-    <query>`zentra_interval_precip` device_sn="$device_sn$"
-| eval _time=_time+coalesce(tonumber(tz_offset), 0)</query>
+    <query>`zentra_interval_precip` device_sn="$device_sn$"</query>
     <earliest>$time.earliest$</earliest>
     <latest>$time.latest$</latest>
   </search>
@@ -88,7 +87,8 @@
       <chart>
         <title>Daily rainfall (sum of that day's 15-minute samples)</title>
         <search base="precip_base">
-          <query>| timechart span=1d sum(value) as daily_rainfall</query>
+          <query>| eval _time=strptime(logger_day, "%Y-%m-%d")
+| timechart span=1d sum(value) as daily_rainfall</query>
         </search>
         <option name="charting.chart">column</option>
         <option name="charting.legend.placement">none</option>
@@ -98,7 +98,8 @@
       <chart>
         <title>Weekly rainfall (sum of that week's 15-minute samples)</title>
         <search base="precip_base">
-          <query>| timechart span=1w sum(value) as weekly_rainfall</query>
+          <query>| eval _time=strptime(logger_day, "%Y-%m-%d")
+| timechart span=1w sum(value) as weekly_rainfall</query>
         </search>
         <option name="charting.chart">column</option>
         <option name="charting.legend.placement">none</option>
@@ -110,11 +111,10 @@
       <table>
         <title>Daily rainfall table — compare a day's total here, not a 15-minute tooltip on ZENTRA</title>
         <search base="precip_base">
-          <query>| bin _time span=1d
-| stats sum(value) as rainfall latest(units) as units dc(value) as interval_samples by _time, device_sn, measurement
+          <query>| stats sum(value) as rainfall latest(units) as units dc(value) as interval_samples by logger_day, device_sn, measurement
 | eval rainfall=round(rainfall, 3)
-| sort - _time
-| rename _time as day, rainfall as rainfall_total, measurement as zentra_measurement</query>
+| sort - logger_day
+| rename logger_day as day, rainfall as rainfall_total, measurement as zentra_measurement</query>
         </search>
         <option name="drilldown">none</option>
         <option name="count">14</option>

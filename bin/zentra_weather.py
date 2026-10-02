@@ -251,6 +251,19 @@ def _poll_device(stanza_name: str, device_sn: str, settings: dict, checkpoint_di
                     settings["index"],
                 )
             )
+            if events:
+                sample = events[0]
+                log(
+                    "device %s sample_time datetime=%s timestamp_utc=%s tz_offset=%s logger_day=%s measurement=%s"
+                    % (
+                        device_sn,
+                        sample.get("datetime"),
+                        sample.get("timestamp_utc"),
+                        sample.get("tz_offset"),
+                        sample.get("logger_day"),
+                        sample.get("measurement"),
+                    )
+                )
             if measurement_map and page_emitted == 0:
                 log(
                     "parsed measurement names but no sample rows for %s: %s; %s"

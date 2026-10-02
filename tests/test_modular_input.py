@@ -209,6 +209,9 @@ class AppPackagingTests(unittest.TestCase):
         ):
             ET.parse(app / "default" / "data" / "ui" / "views" / view)
         ET.parse(app / "default" / "data" / "ui" / "nav" / "default.xml")
+        validation = (app / "default" / "data" / "ui" / "views" / "reading_validation.xml").read_text()
+        self.assertIn("| table datetime,", validation)
+        self.assertNotIn("_time=_time+coalesce", validation)
 
     def test_default_inputs_have_no_token(self):
         text = (ROOT / "default" / "inputs.conf").read_text()

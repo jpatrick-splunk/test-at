@@ -1,6 +1,7 @@
 import json
 import sys
 import unittest
+from datetime import datetime
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -162,6 +163,8 @@ class NormalizeTests(unittest.TestCase):
                 {
                     "columns": [
                         "timestamp_utc",
+                        "datetime",
+                        "tz_offset",
                         "measurement",
                         "value",
                         "units",
@@ -176,6 +179,8 @@ class NormalizeTests(unittest.TestCase):
                     "data": [
                         [
                             1720000000,
+                            "2026-10-01 12:00:00-05:00",
+                            "-05:00",
                             "Precipitation",
                             1.2,
                             "mm",
@@ -189,6 +194,8 @@ class NormalizeTests(unittest.TestCase):
                         ],
                         [
                             1720000000,
+                            "2026-10-01 12:00:00-05:00",
+                            "-05:00",
                             "Air Temperature",
                             24.7,
                             "°C",
@@ -202,6 +209,8 @@ class NormalizeTests(unittest.TestCase):
                         ],
                         [
                             1720000900,
+                            "2026-10-01 12:15:00-05:00",
+                            "-05:00",
                             "Precipitation",
                             0.0,
                             "mm",
@@ -230,6 +239,9 @@ class NormalizeTests(unittest.TestCase):
         self.assertEqual(precip[0]["units"], "mm")
         self.assertEqual(precip[0]["measurement_canonical"], "precipitation")
         self.assertEqual(precip[0]["sensor_sn"], "a41-1")
+        self.assertEqual(precip[0]["datetime"], "2026-10-01 12:00:00-05:00")
+        self.assertEqual(precip[0]["logger_day"], "2026-10-01")
+        self.assertEqual(precip[0]["timestamp_utc"], int(datetime.fromisoformat("2026-10-01T12:00:00-05:00").timestamp()))
         self.assertAlmostEqual(precip[0]["latitude"], 46.75)
         self.assertAlmostEqual(precip[0]["longitude"], -117.18)
 
@@ -344,7 +356,58 @@ class NormalizeTests(unittest.TestCase):
         events = flatten_readings(mapping)
         self.assertEqual(len(events), 1)
         self.assertEqual(events[0]["value"], 18.2)
-        self.assertTrue(events[0]["timestamp_utc"])
+        self.assertEqual(events[0]["datetime"], "2026-10-01 12:00:00-05:00")
+        self.assertEqual(events[0]["logger_day"], "2026-10-01")
+        self.assertEqual(events[0]["tz_offset"], -18000)
+        expected = int(datetime.fromisoformat("2026-10-01T12:00:00-05:00").timestamp())
+        self.assertEqual(events[0]["timestamp_utc"], expected)
+
+    def test_datetime_wins_over_timestamp_utc(self):
+        mapping = {
+            "Precipitation": [
+                {
+                    "metadata": {"units": "mm"},
+                    "readings": [
+                        {
+                            "timestamp_utc": 1720000000,
+                            "datetime": "2026-10-01 12:15:00-05:00",
+                            "tz_offset": "-05:00",
+                            "value": 0.4,
+                            "mrid": 11,
+                        }
+                    ],
+                }
+            ]
+        }
+        events = flatten_readings(mapping)
+        self.assertEqual(len(events), 1)
+        self.assertEqual(events[0]["datetime"], "2026-10-01 12:15:00-05:00")
+        self.assertEqual(events[0]["logger_day"], "2026-10-01")
+        expected = int(datetime.fromisoformat("2026-10-01T12:15:00-05:00").timestamp())
+        self.assertEqual(events[0]["timestamp_utc"], expected)
+        self.assertNotEqual(events[0]["timestamp_utc"], 1720000000)
+
+    def test_naive_datetime_uses_tz_offset_hours(self):
+        mapping = {
+            "Precipitation": [
+                {
+                    "metadata": {"units": "mm"},
+                    "readings": [
+                        {
+                            "datetime": "2026-10-01 12:00:00",
+                            "tz_offset": -5,
+                            "value": 0.1,
+                            "mrid": 12,
+                        }
+                    ],
+                }
+            ]
+        }
+        events = flatten_readings(mapping)
+        expected = int(datetime.fromisoformat("2026-10-01T12:00:00-05:00").timestamp())
+        self.assertEqual(events[0]["timestamp_utc"], expected)
+        self.assertEqual(events[0]["tz_offset"], -18000)
+        self.assertEqual(events[0]["logger_day"], "2026-10-01")
 
 
 if __name__ == "__main__":

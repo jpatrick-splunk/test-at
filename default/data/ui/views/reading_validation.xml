@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <dashboard version="1.1">
   <label>Reading Validation</label>
-  <description>Raw 15-minute ZENTRA readings indexed without dashboard math. Compare measurement names, timestamps, values, and units to https://zentracloud.com/#/dashboard_detail/z6-30302. Precipitation on that page is rainfall during each interval, not a daily total — use Rainfall Totals for day/week accumulation.</description>
+  <description>Raw 15-minute ZENTRA readings. The datetime field is the logger measurement time from ZENTRA Cloud (compare it to https://zentracloud.com/#/dashboard_detail/z6-30302). Precipitation on that page is rainfall during each interval, not a daily total — use Rainfall Totals for day/week accumulation.</description>
   <fieldset submitButton="false" autoRun="true">
     <input type="time" token="time" searchWhenChanged="true">
       <label>Time range</label>
@@ -56,12 +56,11 @@
   <row>
     <panel>
       <table>
-        <title>15-minute samples — hover the same timestamp on ZENTRA Cloud; the value and units should match</title>
+        <title>15-minute samples — compare datetime to the ZENTRA Cloud x-axis</title>
         <search>
           <query>`zentra_weather_search` device_sn="$device_sn$" measurement="$measurement$"
-| eval _time=_time+coalesce(tonumber(tz_offset), 0)
-| table _time, device_sn, measurement, value, units, aggregation, mrid, sensor_name, error_flag
-| sort - _time</query>
+| table datetime, logger_day, _time, device_sn, measurement, value, units, tz_offset, sensor_name, mrid, error_flag
+| sort - datetime</query>
           <earliest>$time.earliest$</earliest>
           <latest>$time.latest$</latest>
         </search>
