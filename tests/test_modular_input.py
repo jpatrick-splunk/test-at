@@ -189,6 +189,13 @@ class AppPackagingTests(unittest.TestCase):
         self.assertIn("sourcetype = zentra:reading", text)
         self.assertNotRegex(text, r"(?i)^api_token\s*=\s*\S+", "token must not be hardcoded")
 
+    def test_python_sources_compile(self):
+        import py_compile
+
+        bin_dir = ROOT / "bin"
+        for path in list(bin_dir.glob("*.py")) + list((bin_dir / "zentra").glob("*.py")):
+            py_compile.compile(str(path), doraise=True)
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -300,7 +300,7 @@ def _pandas_split_to_map(obj: Any) -> Optional[Dict[str, Any]]:
     }
     skip = {i for i, name in enumerate(lower) if name in skip_names}
     mapping: Dict[str, Any] = {}
-        for col_idx, col in enumerate(columns):
+    for col_idx, col in enumerate(columns):
         if col_idx in skip:
             continue
         if isinstance(col, (list, tuple)):
