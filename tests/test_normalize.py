@@ -442,6 +442,38 @@ class NormalizeTests(unittest.TestCase):
         events = flatten_readings(mapping)
         self.assertEqual(len(events), 1)
 
+    def test_keeps_readings_after_september_23_checkpoint(self):
+        last_ts = int(datetime.fromisoformat("2026-09-23T23:45:00-05:00").timestamp())
+        self.assertEqual(last_ts, 1790225100)
+        mapping = {
+            "Wind Speed": [
+                {
+                    "metadata": {
+                        "units": "mph",
+                        "sensor_sn": "A41G2S0001688",
+                    },
+                    "readings": [
+                        {
+                            "datetime": "2026-09-23 23:45:00-05:00",
+                            "value": 2.46,
+                            "mrid": 59781,
+                        },
+                        {
+                            "datetime": "2026-09-24 00:00:00-05:00",
+                            "value": 2.1,
+                            "mrid": 59782,
+                        },
+                    ],
+                }
+            ]
+        }
+        events = flatten_readings(
+            mapping, min_mrid=59781, min_timestamp_utc=last_ts
+        )
+        self.assertEqual(len(events), 1)
+        self.assertEqual(events[0]["datetime"], "2026-09-24 00:00:00-05:00")
+        self.assertEqual(events[0]["value"], 2.1)
+
     def test_newer_datetime_not_skipped_for_old_mrid(self):
         mapping = {
             "Precipitation": [

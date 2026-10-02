@@ -46,6 +46,30 @@ index=* (sourcetype=zentra:reading OR source=zentra_weather://*)
 index=_internal zentra_weather
 ```
 
+## Collection stopped after 9/23
+
+If Splunk still has readings through `2026-09-23 23:45:00-05:00` (`mrid` 59781) and ZENTRA Cloud is current, the poller asked for `start_mrid` after the first dump. The dataframe API returns little or nothing for that, so nothing after 23:45 was indexed.
+
+This revision always requests `start_date`/`end_date` from the last logger datetime (that 23:45 sample) through now. Do **not** delete the 9/23 events.
+
+```
+cd /Applications/Splunk/etc/apps/zentra
+git pull
+```
+
+Restart Splunk. In **Settings → Data inputs → ZENTRA Cloud Weather → validate**, keep **Ignore checkpoint** unchecked and **Interval** at 900. Disable, save, then enable `validate` once.
+
+Confirm catch-up (All time):
+
+```
+index=zentra_validate sourcetype=zentra:reading device_sn=z6-30302
+| stats max(datetime) as last_datetime max(mrid) as last_mrid
+
+index=_internal zentra_weather (window= OR lag_hours= OR catch-up)
+```
+
+`last_datetime` should move past 9/23 toward now. Logs should show `window=catch-up` and `start_date=2026-09-24 04:30:00`, not `start_mrid`.
+
 ## Validate 15-minute numbers against ZENTRA Cloud
 
 Open **ZENTRA Weather → Reading Validation** next to [the logger dashboard](https://zentracloud.com/#/dashboard_detail/z6-30302).
@@ -85,7 +109,7 @@ Set it in one of these ways (first match wins):
 | --- | --- | --- |
 | `device_sns` | `z6-30302` | Comma-separated, **maximum three** loggers |
 | `api_base_url` | `https://zentracloud.com` | Use `https://zentracloud.eu` for the EU server. HTTPS is required. |
-| `lookback_hours` | `336` | Hours of history on the first poll (14 days) so a weekly total has enough samples |
+| `lookback_hours` | `720` | Hours of history on a date-range poll (30 days). After the first dump the poller resumes from the last logger datetime, not `start_mrid`. |
 | `per_page` | `2000` | ZENTRA maximum |
 | `interval` | `900` | Seconds. Matches the typical 15-minute logger measurement interval. ZENTRA allows one API call per device per minute. |
 | `index` | `zentra_validate` | Keep validation data out of `main` / `weather` until numbers match the dashboard |

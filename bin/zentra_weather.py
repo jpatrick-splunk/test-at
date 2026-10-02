@@ -176,15 +176,32 @@ def _poll_device(stanza_name: str, device_sn: str, settings: dict, checkpoint_di
     output_format = settings.get("output_format") or "df"
     now = datetime.now(timezone.utc)
     now_ts = int(now.timestamp())
+    lag_hours = None
+    if last_ts is not None:
+        last_dt = datetime.fromtimestamp(int(last_ts), tz=timezone.utc)
+        lag_hours = (now_ts - int(last_ts)) / 3600.0
+        log(
+            "checkpoint %s last_mrid=%s last_datetime=%s lag_hours=%.1f"
+            % (device_sn, min_mrid, last_dt.strftime("%Y-%m-%d %H:%M:%S"), lag_hours)
+        )
     # The v4 dataframe API is a start_date/end_date dump. start_mrid returns
-    # little or nothing, which froze collection after the first successful pull.
+    # little or nothing, which froze collection after the first successful pull
+    # (last sample 2026-09-23 23:45:00-05:00, mrid 59781 on z6-30302).
     end_dt = now
     if ignore_ckpt or last_ts is None:
         start_dt = end_dt - timedelta(hours=lookback)
         window = "lookback"
     elif int(last_ts) < now_ts - 900:
         start_dt = datetime.fromtimestamp(int(last_ts) - 900, tz=timezone.utc)
-        window = "incremental"
+        window = "catch-up" if lag_hours is not None and lag_hours > 24 else "incremental"
+        if lag_hours is not None and lag_hours > 48:
+            # Fill a multi-day gap by logger datetime only. MRIDs do not resume
+            # collection on the df path.
+            min_mrid = None
+            log(
+                "checkpoint %s is %.1f hours behind; catch-up start_date=%s without skip_mrid"
+                % (device_sn, lag_hours, start_dt.strftime("%Y-%m-%d %H:%M:%S"))
+            )
     else:
         start_dt = end_dt - timedelta(hours=lookback)
         window = "lookback"
@@ -290,7 +307,7 @@ def _poll_device(stanza_name: str, device_sn: str, settings: dict, checkpoint_di
 
     try:
         got = emit_window(start_dt, end_dt, min_mrid, min_ts, window)
-        if got == 0 and window == "incremental" and not ignore_ckpt:
+        if got == 0 and window in ("incremental", "catch-up") and not ignore_ckpt:
             log(
                 "device %s incremental window emitted 0; retrying %sh lookback from logger datetime"
                 % (device_sn, lookback)

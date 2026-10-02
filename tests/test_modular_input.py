@@ -5,6 +5,7 @@ import sys
 import tempfile
 import unittest
 import xml.etree.ElementTree as ET
+from datetime import datetime, timezone
 from pathlib import Path
 from unittest.mock import patch
 
@@ -120,6 +121,49 @@ class RunTests(unittest.TestCase):
             self.assertIsNone(kwargs.get("start_mrid"))
             self.assertIsNotNone(kwargs.get("start_date"))
             self.assertIsNotNone(kwargs.get("end_date"))
+
+    def test_september_23_checkpoint_catches_up_with_date_range(self):
+        # Last indexed ATMOS 41 sample on z6-30302: 2026-09-23 23:45:00-05:00.
+        last_ts = 1790225100
+        with tempfile.TemporaryDirectory() as tmp:
+            ckpt_dir = Path(tmp, "zentra_weather_validate")
+            ckpt_dir.mkdir()
+            (ckpt_dir / "z6-30302.json").write_text(
+                json.dumps(
+                    {
+                        "last_mrid": 59781,
+                        "last_timestamp_utc": last_ts,
+                        "device_sn": "z6-30302",
+                    }
+                ),
+                encoding="utf-8",
+            )
+            xml = RUN_XML_TEMPLATE.format(checkpoint_dir=tmp, devices="z6-30302")
+
+            class FrozenDateTime(datetime):
+                @classmethod
+                def now(cls, tz=None):
+                    aware = datetime(2026, 10, 2, 20, 0, tzinfo=timezone.utc)
+                    return aware if tz is None else aware.astimezone(tz)
+
+            stderr = io.StringIO()
+            with patch("zentra_weather.datetime", FrozenDateTime), patch(
+                "time.sleep"
+            ), patch(
+                "zentra_weather.iter_readings_pages", return_value=[FIXTURE]
+            ) as pages, patch("zentra_weather.start_stream"), patch(
+                "zentra_weather.end_stream"
+            ), patch("zentra_weather.write_event"), patch("sys.stderr", stderr):
+                mi.run(xml)
+            self.assertGreaterEqual(pages.call_count, 1)
+            kwargs = pages.call_args_list[0].kwargs
+            self.assertIsNone(kwargs.get("start_mrid"))
+            self.assertEqual(kwargs.get("start_date"), "2026-09-24 04:30:00")
+            self.assertEqual(kwargs.get("end_date"), "2026-10-02 20:00:00")
+            logs = stderr.getvalue()
+            self.assertIn("window=catch-up", logs)
+            self.assertIn("last_mrid=59781", logs)
+            self.assertIn("without skip_mrid", logs)
 
     def test_ignore_checkpoint_still_skips_already_indexed(self):
         with tempfile.TemporaryDirectory() as tmp:
