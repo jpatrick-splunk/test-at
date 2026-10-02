@@ -165,6 +165,84 @@ class RunTests(unittest.TestCase):
             self.assertIn("last_mrid=59781", logs)
             self.assertIn("without skip_mrid", logs)
 
+    def test_recent_checkpoint_does_not_retry_720h_lookback(self):
+        last_ts = int(datetime(2026, 10, 2, 19, 45, tzinfo=timezone.utc).timestamp())
+        with tempfile.TemporaryDirectory() as tmp:
+            ckpt_dir = Path(tmp, "zentra_weather_validate")
+            ckpt_dir.mkdir()
+            (ckpt_dir / "z6-30302.json").write_text(
+                json.dumps(
+                    {
+                        "last_mrid": 60612,
+                        "last_timestamp_utc": last_ts,
+                        "device_sn": "z6-30302",
+                    }
+                ),
+                encoding="utf-8",
+            )
+            xml = RUN_XML_TEMPLATE.format(checkpoint_dir=tmp, devices="z6-30302")
+
+            class FrozenDateTime(datetime):
+                @classmethod
+                def now(cls, tz=None):
+                    aware = datetime(2026, 10, 2, 20, 0, tzinfo=timezone.utc)
+                    return aware if tz is None else aware.astimezone(tz)
+
+            stderr = io.StringIO()
+            with patch("zentra_weather.datetime", FrozenDateTime), patch(
+                "zentra_weather.time.sleep"
+            ), patch(
+                "zentra_weather.iter_readings_pages", return_value=[FIXTURE]
+            ) as pages, patch("zentra_weather.start_stream"), patch(
+                "zentra_weather.end_stream"
+            ), patch("zentra_weather.write_event"), patch("sys.stderr", stderr):
+                mi.run(xml)
+            logs = stderr.getvalue()
+            self.assertIn("not retrying", logs)
+            self.assertNotIn("retrying 720h lookback from logger datetime", logs)
+            self.assertIn("window=gap-fill", logs)
+            self.assertGreaterEqual(pages.call_count, 2)
+            fill = pages.call_args_list[1].kwargs
+            self.assertEqual(fill.get("start_date"), "2026-09-23 19:45:00")
+            self.assertEqual(fill.get("end_date"), "2026-10-02 19:30:00")
+            ckpt = json.loads((ckpt_dir / "z6-30302.json").read_text())
+            self.assertTrue(ckpt.get("gap_fill_complete"))
+
+    def test_gap_fill_complete_skips_second_pull(self):
+        last_ts = int(datetime(2026, 10, 2, 19, 45, tzinfo=timezone.utc).timestamp())
+        with tempfile.TemporaryDirectory() as tmp:
+            ckpt_dir = Path(tmp, "zentra_weather_validate")
+            ckpt_dir.mkdir()
+            (ckpt_dir / "z6-30302.json").write_text(
+                json.dumps(
+                    {
+                        "last_mrid": 60612,
+                        "last_timestamp_utc": last_ts,
+                        "device_sn": "z6-30302",
+                        "gap_fill_complete": True,
+                    }
+                ),
+                encoding="utf-8",
+            )
+            xml = RUN_XML_TEMPLATE.format(checkpoint_dir=tmp, devices="z6-30302")
+
+            class FrozenDateTime(datetime):
+                @classmethod
+                def now(cls, tz=None):
+                    aware = datetime(2026, 10, 2, 20, 0, tzinfo=timezone.utc)
+                    return aware if tz is None else aware.astimezone(tz)
+
+            with patch("zentra_weather.datetime", FrozenDateTime), patch(
+                "zentra_weather.time.sleep"
+            ) as slept, patch(
+                "zentra_weather.iter_readings_pages", return_value=[FIXTURE]
+            ) as pages, patch("zentra_weather.start_stream"), patch(
+                "zentra_weather.end_stream"
+            ), patch("zentra_weather.write_event"):
+                mi.run(xml)
+            self.assertEqual(pages.call_count, 1)
+            slept.assert_not_called()
+
     def test_ignore_checkpoint_with_stale_ckpt_resumes_from_last_datetime(self):
         last_ts = 1790225100
         with tempfile.TemporaryDirectory() as tmp:

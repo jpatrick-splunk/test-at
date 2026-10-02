@@ -75,7 +75,14 @@ index=zentra_validate sourcetype=zentra:reading device_sn=z6-30302
 index=_internal zentra_weather (window= OR lag_hours= OR catch-up OR page_num_readings)
 ```
 
-`last_datetime` should move past `2026-09-23 23:45:00-05:00` toward now. Logs should show `window=catch-up`, `page_end` on 10/02, and `start_date=2026-09-24 04:30:00`, not a 30-day lookback.
+`last_datetime` should move past `2026-09-23 23:45:00-05:00` toward now. Logs should show `window=catch-up` or `window=gap-fill`. An empty 15-minute incremental poll is normal and must **not** start a 30-day dump (`retrying 720h lookback`).
+
+Open **Collection Status** and check **Readings by logger_day**. Days `2026-09-24` through `2026-10-01` should have counts after gap-fill, not only `2026-10-02`:
+
+```
+index=zentra_validate sourcetype=zentra:reading device_sn=z6-30302
+| stats count by logger_day
+```
 
 ## Validate 15-minute numbers against ZENTRA Cloud
 

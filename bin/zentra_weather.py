@@ -7,6 +7,7 @@ import sys
 import traceback
 from datetime import datetime, timedelta, timezone
 from typing import List, Optional, TextIO
+import time
 
 from zentra import SCHEME_NAME
 from zentra.checkpoint import load_checkpoint, save_checkpoint
@@ -219,9 +220,10 @@ def _poll_device(stanza_name: str, device_sn: str, settings: dict, checkpoint_di
     emitted = 0
     max_mrid = last_mrid
     max_ts = last_ts
+    oldest_ts = None
 
     def emit_window(start_dt, end_dt, min_mrid, min_ts, label):
-        nonlocal emitted, max_mrid, max_ts
+        nonlocal emitted, max_mrid, max_ts, oldest_ts
         start_date = start_dt.strftime("%Y-%m-%d %H:%M:%S")
         end_date = end_dt.strftime("%Y-%m-%d %H:%M:%S")
         log(
@@ -292,6 +294,7 @@ def _poll_device(stanza_name: str, device_sn: str, settings: dict, checkpoint_di
                     max_mrid = mrid if max_mrid is None else max(int(max_mrid), int(mrid))
                 if ts is not None:
                     max_ts = ts if max_ts is None else max(int(max_ts), int(ts))
+                    oldest_ts = int(ts) if oldest_ts is None else min(int(oldest_ts), int(ts))
             log(
                 "device %s page %s measurements=%s sample=%s events=%s total_emitted=%s index=%s"
                 % (
@@ -328,36 +331,78 @@ def _poll_device(stanza_name: str, device_sn: str, settings: dict, checkpoint_di
                 )
         return window_emitted, had_readings
 
+    extra_ckpt = {}
     try:
         got, had_readings = emit_window(start_dt, end_dt, min_mrid, min_ts, window)
+        # An empty 15-minute incremental poll is normal (next sample not due
+        # yet). A 720h lookback from the oldest end never reaches new data and
+        # with last_ts already on "today" it skips 9/24–10/01 as already seen.
         if (
             got == 0
             and not had_readings
+            and lag_hours is not None
+            and lag_hours > 48
             and window in ("incremental", "catch-up")
             and not ignore_ckpt
         ):
             log(
-                "device %s incremental window emitted 0; retrying %sh lookback from logger datetime"
+                "device %s catch-up window empty and %.1fh behind; retrying %sh from last logger datetime"
+                % (device_sn, lag_hours, lookback)
+            )
+            time.sleep(DEVICE_CALL_GAP_SECONDS)
+            retry_start = datetime.fromtimestamp(int(last_ts) - 900, tz=timezone.utc)
+            emit_window(retry_start, now, None, None, "lookback-retry")
+        elif got == 0 and window == "incremental":
+            log(
+                "device %s incremental window emitted 0 (next 15-minute sample not due); not retrying %sh lookback"
                 % (device_sn, lookback)
             )
-            import time as _time
 
-            _time.sleep(DEVICE_CALL_GAP_SECONDS)
-            retry_start = now - timedelta(hours=lookback)
-            stale_logger = last_ts is not None and int(last_ts) < now_ts - 2 * 86400
-            retry_min_ts = int(last_ts) if stale_logger else None
-            emit_window(retry_start, now, None, retry_min_ts, "lookback-retry")
+        # Checkpoint jumped to today after indexing only the newest page, so
+        # 9/24–10/01 were never stored and skip_ts=today would drop them.
+        # One date-range pull from 9 days before last_ts up to the last sample,
+        # without skip, fills that hole. Today's rows are outside end_date.
+        if (
+            last_ts is not None
+            and lag_hours is not None
+            and 0 <= lag_hours < 24
+            and not ckpt.get("gap_fill_complete")
+        ):
+            time.sleep(DEVICE_CALL_GAP_SECONDS)
+            fill_start = datetime.fromtimestamp(int(last_ts), tz=timezone.utc) - timedelta(days=9)
+            fill_end = datetime.fromtimestamp(int(last_ts) - 900, tz=timezone.utc)
+            if fill_start < fill_end:
+                log(
+                    "device %s filling logger_day gap behind last_ts (9/24–yesterday); "
+                    "start_date=%s end_date=%s"
+                    % (
+                        device_sn,
+                        fill_start.strftime("%Y-%m-%d %H:%M:%S"),
+                        fill_end.strftime("%Y-%m-%d %H:%M:%S"),
+                    )
+                )
+                emit_window(fill_start, fill_end, None, None, "gap-fill")
+            extra_ckpt["gap_fill_complete"] = True
     except Exception as exc:
         log("poll failed for %s: %s" % (device_sn, exc))
         log(traceback.format_exc())
 
-    if emitted or max_mrid != last_mrid or max_ts != last_ts:
+    if last_ts is not None and oldest_ts is not None and int(oldest_ts) > int(last_ts) + 1800:
+        log(
+            "device %s hole: oldest emitted ts=%s is after checkpoint ts=%s; "
+            "not advancing last_timestamp_utc"
+            % (device_sn, oldest_ts, last_ts)
+        )
+        max_ts = last_ts
+
+    if emitted or max_mrid != last_mrid or max_ts != last_ts or extra_ckpt:
         save_checkpoint(
             checkpoint_dir,
             device_sn,
             last_mrid=int(max_mrid) if max_mrid is not None else None,
             last_timestamp_utc=int(max_ts) if max_ts is not None else None,
             namespace=stanza_name,
+            extra=extra_ckpt or None,
         )
     log("device %s emitted %d events" % (device_sn, emitted))
     return emitted

@@ -44,6 +44,22 @@
   <row>
     <panel>
       <table>
+        <title>Readings by logger_day (All time — 9/24 through 10/01 should list after gap-fill)</title>
+        <search>
+          <query>index=* sourcetype=zentra:reading
+| stats count as events dc(measurement) as measurements max(datetime) as last_datetime by logger_day, device_sn
+| sort logger_day</query>
+          <earliest>0</earliest>
+          <latest>now</latest>
+        </search>
+        <option name="drilldown">none</option>
+        <option name="count">40</option>
+      </table>
+    </panel>
+  </row>
+  <row>
+    <panel>
+      <table>
         <title>Poller log (splunkd) — look for skipping, poll failed, or index=zentra_validate</title>
         <search>
           <query>index=_internal sourcetype=splunkd zentra_weather

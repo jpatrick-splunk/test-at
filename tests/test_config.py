@@ -139,6 +139,15 @@ class CheckpointTests(unittest.TestCase):
             self.assertEqual(data["last_mrid"], 10)
             self.assertEqual(data["last_timestamp_utc"], 200)
 
+    def test_extra_fields_roundtrip(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            save_checkpoint(
+                tmp, "z6-30302", last_mrid=1, last_timestamp_utc=10, extra={"gap_fill_complete": True}
+            )
+            data = load_checkpoint(tmp, "z6-30302")
+            self.assertTrue(data["gap_fill_complete"])
+            self.assertEqual(data["last_mrid"], 1)
+
     def test_namespace_is_isolated(self):
         with tempfile.TemporaryDirectory() as tmp:
             save_checkpoint(tmp, "z6-30302", last_mrid=1, namespace="zentra_weather://field_loggers")

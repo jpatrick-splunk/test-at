@@ -44,6 +44,7 @@ def save_checkpoint(
     last_mrid: Optional[int] = None,
     last_timestamp_utc: Optional[int] = None,
     namespace: Optional[str] = None,
+    extra: Optional[Dict[str, Any]] = None,
 ) -> Dict[str, Any]:
     if not checkpoint_dir:
         return {}
@@ -58,6 +59,11 @@ def save_checkpoint(
         previous_ts = current.get("last_timestamp_utc")
         if previous_ts is None or int(last_timestamp_utc) > int(previous_ts):
             current["last_timestamp_utc"] = int(last_timestamp_utc)
+    if extra:
+        for key, value in extra.items():
+            if key in ("last_mrid", "last_timestamp_utc", "device_sn"):
+                continue
+            current[key] = value
     current["device_sn"] = device_sn
     tmp_dir = os.path.dirname(path) or checkpoint_dir
     fd, tmp_path = tempfile.mkstemp(prefix=".ckpt-", dir=tmp_dir)
