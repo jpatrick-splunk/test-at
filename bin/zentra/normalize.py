@@ -200,6 +200,38 @@ def describe_measurement_map(measurement_map: Dict[str, Any]) -> str:
     )
 
 
+def reading_skip_summary(
+    measurement_map: Dict[str, Any], min_mrid: Optional[int] = None
+) -> str:
+    """Count rows that flatten would keep vs skip (timestamp / checkpoint)."""
+    rows = with_ts = skipped_mrid = no_ts = 0
+    for entries in (measurement_map or {}).values():
+        if not isinstance(entries, list):
+            entries = [entries]
+        for entry in entries:
+            if not isinstance(entry, dict):
+                continue
+            for reading in entry_readings(entry):
+                if not isinstance(reading, dict):
+                    continue
+                rows += 1
+                ts = _reading_timestamp(reading)
+                if ts is None:
+                    no_ts += 1
+                    continue
+                with_ts += 1
+                mrid = _as_int(reading.get("mrid") or reading.get("reading_id"))
+                if min_mrid is not None and mrid is not None and mrid <= int(min_mrid):
+                    skipped_mrid += 1
+    return "rows=%s with_timestamp=%s skipped_mrid=%s no_timestamp=%s min_mrid=%s" % (
+        rows,
+        with_ts,
+        skipped_mrid,
+        no_ts,
+        min_mrid,
+    )
+
+
 def _coerce_reading_list(raw: Any) -> List[Dict[str, Any]]:
     if isinstance(raw, (bytes, bytearray)):
         try:

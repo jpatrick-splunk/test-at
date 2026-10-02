@@ -21,7 +21,7 @@ from zentra.config import (
     parse_input_xml,
     stanza_settings,
 )
-from zentra.normalize import describe_measurement_map, flatten_readings
+from zentra.normalize import describe_measurement_map, flatten_readings, reading_skip_summary
 from zentra.stream import end_stream, start_stream, write_event
 
 SCHEME = """<scheme>
@@ -52,7 +52,19 @@ SCHEME = """<scheme>
             </arg>
             <arg name="lookback_hours">
                 <title>Initial lookback hours</title>
-                <description>Hours of history to request on the first poll before a checkpoint exists. Default 336 (14 days).</description>
+                <description>Hours of history to request on a date-range poll. Default 720 (30 days). Official v4 docs use start_date and end_date together.</description>
+                <required_on_create>false</required_on_create>
+                <required_on_edit>false</required_on_edit>
+            </arg>
+            <arg name="output_format">
+                <title>ZENTRA output format</title>
+                <description>json, df, or csv. Official v4 examples use df (pandas table of the full date range). Default df.</description>
+                <required_on_create>false</required_on_create>
+                <required_on_edit>false</required_on_edit>
+            </arg>
+            <arg name="ignore_checkpoint">
+                <title>Ignore checkpoint (full date-range pull)</title>
+                <description>If true, request start_date/end_date for the lookback window instead of start_mrid. Use this to pull 30 days at once. Default true during validation.</description>
                 <required_on_create>false</required_on_create>
                 <required_on_edit>false</required_on_edit>
             </arg>
@@ -154,19 +166,29 @@ def _run_stanza(stanza, checkpoint_dir: str) -> int:
 
 
 def _poll_device(stanza_name: str, device_sn: str, settings: dict, checkpoint_dir: str) -> int:
-    ckpt = load_checkpoint(checkpoint_dir, device_sn, namespace=stanza_name)
+    ignore_ckpt = bool(settings.get("ignore_checkpoint"))
+    ckpt = {} if ignore_ckpt else load_checkpoint(checkpoint_dir, device_sn, namespace=stanza_name)
     last_mrid = ckpt.get("last_mrid")
     start_mrid = int(last_mrid) + 1 if last_mrid is not None else None
     start_date = end_date = None
+    lookback = int(settings["lookback_hours"])
+    output_format = settings.get("output_format") or "df"
+    # Official v4 docs: use start_date/end_date OR start_mrid/end_mrid, not both.
+    # start_date overrides start_mrid. A 30-day validation pull always uses dates.
     if start_mrid is None:
-        lookback = int(settings["lookback_hours"])
         end_dt = datetime.now(timezone.utc)
         start_dt = end_dt - timedelta(hours=lookback)
         start_date = start_dt.strftime("%Y-%m-%d %H:%M:%S")
         end_date = end_dt.strftime("%Y-%m-%d %H:%M:%S")
-        log("polling %s from %s (lookback %sh)" % (device_sn, start_date, lookback))
+        log(
+            "polling %s start_date=%s end_date=%s format=%s lookback=%sh"
+            % (device_sn, start_date, end_date, output_format, lookback)
+        )
     else:
-        log("polling %s from mrid %s" % (device_sn, start_mrid))
+        log(
+            "polling %s from mrid %s format=%s"
+            % (device_sn, start_mrid, output_format)
+        )
 
     emitted = 0
     max_mrid = last_mrid
@@ -182,6 +204,7 @@ def _poll_device(stanza_name: str, device_sn: str, settings: dict, checkpoint_di
             end_date=end_date,
             start_mrid=start_mrid,
             per_page=int(settings["per_page"]),
+            output_format=output_format,
         )
         for page_num, payload in enumerate(pages, 1):
             measurement_map, location_history = extract_measurement_map(payload)
@@ -229,8 +252,12 @@ def _poll_device(stanza_name: str, device_sn: str, settings: dict, checkpoint_di
             )
             if measurement_map and page_emitted == 0:
                 log(
-                    "parsed measurement names but no sample rows for %s: %s"
-                    % (device_sn, describe_measurement_map(measurement_map))
+                    "parsed measurement names but no sample rows for %s: %s; %s"
+                    % (
+                        device_sn,
+                        describe_measurement_map(measurement_map),
+                        reading_skip_summary(measurement_map, min_mrid=min_mrid),
+                    )
                 )
     except Exception as exc:
         log("poll failed for %s: %s" % (device_sn, exc))

@@ -206,6 +206,12 @@ def index_storage_exists(index_name: str, environ: Optional[dict] = None) -> Opt
     return os.path.isdir(path) or os.path.isdir(os.path.join(path, "db"))
 
 
+def parse_bool(value: Optional[str], default: bool) -> bool:
+    if value is None or str(value).strip() == "":
+        return default
+    return str(value).strip().lower() in ("1", "true", "yes", "y", "on")
+
+
 def stanza_devices(stanza: InputStanza) -> List[str]:
     return parse_device_sns(stanza.params.get("device_sns"))
 
@@ -219,11 +225,13 @@ def stanza_settings(stanza: InputStanza) -> dict:
         ),
         "device_sns": stanza_devices(stanza),
         "lookback_hours": parse_positive_int(
-            stanza.params.get("lookback_hours"), 336, "lookback_hours", maximum=24 * 30
+            stanza.params.get("lookback_hours"), 720, "lookback_hours", maximum=24 * 90
         ),
         "per_page": parse_positive_int(
             stanza.params.get("per_page"), 2000, "per_page", maximum=2000
         ),
+        "ignore_checkpoint": parse_bool(stanza.params.get("ignore_checkpoint"), True),
+        "output_format": (stanza.params.get("output_format") or "df").strip().lower() or "df",
         "index": stanza.index,
         "sourcetype": stanza.sourcetype,
         "host": stanza.host,

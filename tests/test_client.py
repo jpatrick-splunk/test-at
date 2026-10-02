@@ -53,8 +53,16 @@ class ClientTests(unittest.TestCase):
         self.assertIn("device_sn=z6-30302", url)
         self.assertIn("start_mrid=50", url)
         self.assertNotIn("start_date=", url)
-        self.assertIn("output_format=json", url)
+        self.assertIn("output_format=df", url)
         self.assertIn("sort_by=ascending", url)
+        json_url = build_readings_url(
+            "https://zentracloud.com",
+            "z6-30302",
+            start_date="2024-01-01 00:00:00",
+            output_format="json",
+        )
+        self.assertIn("output_format=json", json_url)
+        self.assertIn("start_date=", json_url)
         self.assertIn("location=true", url)
 
     def test_fetch_readings_page_sends_auth_and_parses_json(self):

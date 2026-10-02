@@ -15,8 +15,17 @@ api_base_url = <value>
 * Default: https://zentracloud.com
 
 lookback_hours = <value>
-* Hours of history requested on the first poll for a logger.
-* Default: 336 (14 days). Increase and clear the logger checkpoint to backfill.
+* Hours of history requested on a date-range poll.
+* Default: 720 (30 days). Official v4 docs use start_date and end_date together.
+
+output_format = <value>
+* ZENTRA output_format: json, df, or csv.
+* Default: df. This matches the official v4 Python example, which loads
+* pandas.DataFrame(**json.loads(response["data"])) for a full date range.
+
+ignore_checkpoint = <value>
+* If true, ignore saved MRIDs and pull start_date/end_date for lookback_hours.
+* Default: true during validation so a 30-day dump is not reduced to one sample.
 
 per_page = <value>
 * Readings per API page. Maximum 2000.

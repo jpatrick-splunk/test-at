@@ -29,6 +29,8 @@ RUN_XML_TEMPLATE = """<?xml version="1.0" encoding="utf-8"?>
       <param name="api_base_url">https://zentracloud.com</param>
       <param name="lookback_hours">24</param>
       <param name="per_page">2000</param>
+      <param name="ignore_checkpoint">0</param>
+      <param name="output_format">json</param>
     </stanza>
   </configuration>
 </input>
@@ -47,6 +49,8 @@ class SchemeTests(unittest.TestCase):
         self.assertIn("device_sns", arg_names)
         self.assertIn("api_token", arg_names)
         self.assertIn("api_base_url", arg_names)
+        self.assertIn("output_format", arg_names)
+        self.assertIn("ignore_checkpoint", arg_names)
 
 
 class ValidationTests(unittest.TestCase):

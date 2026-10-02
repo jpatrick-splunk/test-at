@@ -110,4 +110,4 @@ The modular input is Python 3 only (Splunk 10). It uses the standard library (`u
 
 ## ZENTRA Cloud v4
 
-Polls `GET {api_base_url}/api/v4/get_readings/` with `Authorization: Token …`, `output_format=json`, and either `start_mrid` or `start_date`/`end_date`. Units follow the ZENTRA account preference (same as the web dashboard). ATMOS 41 **Precipitation** is millimeters (or the account unit) accumulated **since the previous measurement**; summing those samples is the correct daily/weekly rainfall.
+Polls `GET {api_base_url}/api/v4/get_readings/` as described in the [v4 API documentation](https://zentracloud.com/api/v4/documentation/) and the [US server guide](https://docs.zentracloud.io/l/en/article/gbv2iyxhar-api-v-3-0-us): `Authorization: Token …`, `start_date`/`end_date` **or** `start_mrid`/`end_mrid` (not both), `per_page` up to 2000. The documented Python example uses `output_format=df` and `pandas.DataFrame(**json.loads(data["data"]))`. This app defaults to that dataframe pull for a 30-day window so interval samples are not reduced to a single json reading per sensor.

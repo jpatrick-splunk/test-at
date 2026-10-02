@@ -14,9 +14,9 @@ from zentra.normalize import entry_readings
 
 READINGS_PATH = "/api/v4/get_readings/"
 USER_AGENT = "zentra_weather/1.1 (Splunk modular input)"
-DEFAULT_TIMEOUT = 60
+DEFAULT_TIMEOUT = 120
 DEVICE_CALL_GAP_SECONDS = 61
-MAX_PAGES = 24
+MAX_PAGES = 80
 
 UrlOpen = Callable[..., Any]
 
@@ -53,11 +53,15 @@ def build_readings_url(
     per_page: int = 2000,
     sort_by: str = "ascending",
     location: bool = True,
+    output_format: str = "df",
 ) -> str:
     base = api_base_url.rstrip("/") + READINGS_PATH
+    fmt = (output_format or "df").strip().lower() or "df"
+    if fmt not in ("df", "json"):
+        fmt = "df"
     query: Dict[str, Any] = {
         "device_sn": device_sn,
-        "output_format": "json",
+        "output_format": fmt,
         "page_num": str(page_num),
         "per_page": str(per_page),
         "sort_by": sort_by,
@@ -86,6 +90,7 @@ def fetch_readings_page(
     page_num: int = 1,
     per_page: int = 2000,
     timeout: int = DEFAULT_TIMEOUT,
+    output_format: str = "df",
     urlopen: Optional[UrlOpen] = None,
 ) -> Dict[str, Any]:
     url = build_readings_url(
@@ -97,6 +102,7 @@ def fetch_readings_page(
         end_mrid=end_mrid,
         page_num=page_num,
         per_page=per_page,
+        output_format=output_format,
     )
     request = urllib.request.Request(
         url,
@@ -153,6 +159,7 @@ def iter_readings_pages(
     end_date: Optional[str] = None,
     start_mrid: Optional[int] = None,
     per_page: int = 2000,
+    output_format: str = "df",
     sleep_fn: Callable[[float], None] = time.sleep,
     urlopen: Optional[UrlOpen] = None,
     page_gap_seconds: float = DEVICE_CALL_GAP_SECONDS,
@@ -169,6 +176,7 @@ def iter_readings_pages(
             start_mrid=start_mrid,
             page_num=page_num,
             per_page=per_page,
+            output_format=output_format,
             urlopen=urlopen,
         )
         yield payload
@@ -276,11 +284,27 @@ def _pandas_split_to_map(obj: Any) -> Optional[Dict[str, Any]]:
     ts_idx = _idx("timestamp_utc", "timestamp", "time")
     dt_idx = _idx("datetime", "date")
     mrid_idx = _idx("mrid", "reading_id")
-    skip = {i for i in (ts_idx, dt_idx, mrid_idx) if i is not None}
+    skip_names = {
+        "timestamp_utc",
+        "timestamp",
+        "time",
+        "datetime",
+        "date",
+        "mrid",
+        "reading_id",
+        "tz_offset",
+        "error_flag",
+        "error_description",
+        "precision",
+        "index",
+    }
+    skip = {i for i, name in enumerate(lower) if name in skip_names}
     mapping: Dict[str, Any] = {}
-    for col_idx, col in enumerate(columns):
+        for col_idx, col in enumerate(columns):
         if col_idx in skip:
             continue
+        if isinstance(col, (list, tuple)):
+            col = " ".join(str(part) for part in col if part not in (None, ""))
         readings = []
         for row in rows:
             if not isinstance(row, list) or col_idx >= len(row):
