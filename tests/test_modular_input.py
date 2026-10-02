@@ -133,11 +133,39 @@ class StreamTests(unittest.TestCase):
             source="zentra_weather://z6-30302",
             out=buf,
         )
-        tree = ET.fromstring(buf.getvalue())
+        xml = buf.getvalue()
+        self.assertNotIn("unbroken", xml)
+        tree = ET.fromstring(xml)
         self.assertEqual(tree.findtext("sourcetype"), "zentra:reading")
         self.assertEqual(tree.findtext("index"), "zentra_validate")
         payload = json.loads(tree.findtext("data"))
         self.assertEqual(payload["note"], "<alert>")
+
+    def test_each_reading_is_a_complete_event(self):
+        from zentra.stream import write_event
+
+        buf = io.StringIO()
+        write_event(
+            {"timestamp_utc": 1, "measurement": "Precipitation", "value": 0.1},
+            stanza="zentra_weather://validate",
+            sourcetype="zentra:reading",
+            index="zentra_validate",
+            out=buf,
+        )
+        write_event(
+            {"timestamp_utc": 2, "measurement": "Precipitation", "value": 0.2},
+            stanza="zentra_weather://validate",
+            sourcetype="zentra:reading",
+            index="zentra_validate",
+            out=buf,
+        )
+        xml = buf.getvalue()
+        self.assertNotIn('unbroken="1"', xml)
+        root = ET.fromstring("<stream>%s</stream>" % xml)
+        events = root.findall("event")
+        self.assertEqual(len(events), 2)
+        self.assertEqual(json.loads(events[0].findtext("data"))["value"], 0.1)
+        self.assertEqual(json.loads(events[1].findtext("data"))["value"], 0.2)
 
 
 class AppPackagingTests(unittest.TestCase):

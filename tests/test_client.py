@@ -109,6 +109,17 @@ class ClientTests(unittest.TestCase):
         self.assertEqual(next_page_number({"pagination": {"next_page": 2}}, 1, 2000), 2)
         self.assertIsNone(next_page_number({"pagination": {"next_page": None}}, 1, 2000))
 
+    def test_full_dataframe_dump_does_not_invent_page_two(self):
+        payload = {
+            "data": json.dumps(
+                {
+                    "columns": ["timestamp_utc", "Precipitation"],
+                    "data": [[1720000000 + i, 0.1] for i in range(3000)],
+                }
+            )
+        }
+        self.assertIsNone(next_page_number(payload, 1, 2000))
+
     def test_iter_pages_stops_and_sleeps_between_pages(self):
         calls = {"n": 0, "sleeps": []}
 

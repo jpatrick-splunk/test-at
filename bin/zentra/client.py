@@ -209,11 +209,11 @@ def next_page_number(payload: Dict[str, Any], current_page: int, per_page: int) 
 
     measurement_map, _ = extract_measurement_map(payload)
     reading_count = count_readings(measurement_map)
-    if reading_count <= 0:
-        return None
-    if reading_count < per_page:
-        return None
-    return current_page + 1
+    # A dataframe dump can return the whole date range in one payload. Only
+    # request another page when this one is exactly full.
+    if reading_count == per_page:
+        return current_page + 1
+    return None
 
 
 def extract_measurement_map(payload: Any) -> Tuple[Dict[str, Any], List[Dict[str, Any]]]:
