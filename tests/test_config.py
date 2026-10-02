@@ -121,6 +121,7 @@ class XmlTests(unittest.TestCase):
         self.assertEqual(settings["device_sns"], ["z6-30302"])
         self.assertEqual(settings["api_token"], "from-stanza")
         self.assertEqual(settings["lookback_hours"], 12)
+        self.assertFalse(settings["ignore_checkpoint"])
         self.assertNotIn("session_key", settings)
 
     def test_validation_xml(self):

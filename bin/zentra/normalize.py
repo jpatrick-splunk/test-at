@@ -223,6 +223,7 @@ def reading_skip_summary(
                 mrid = _as_int(reading.get("mrid") or reading.get("reading_id"))
                 if min_mrid is not None and mrid is not None and mrid <= int(min_mrid):
                     skipped_mrid += 1
+                    continue
     return "rows=%s with_timestamp=%s skipped_mrid=%s no_timestamp=%s min_mrid=%s" % (
         rows,
         with_ts,
@@ -331,11 +332,26 @@ def _sequence_to_reading(row: Any) -> Dict[str, Any]:
     return reading
 
 
+def _checkpoint_skip(
+    mrid: Optional[int],
+    ts: Optional[int],
+    min_mrid: Optional[int],
+    min_timestamp_utc: Optional[int],
+) -> bool:
+    """True when this sample was already indexed on a previous poll."""
+    if mrid is not None and min_mrid is not None:
+        return int(mrid) <= int(min_mrid)
+    if min_timestamp_utc is not None and ts is not None:
+        return int(ts) <= int(min_timestamp_utc)
+    return False
+
+
 def flatten_readings(
     measurement_map: Dict[str, Any],
     location_history: Optional[List[Dict[str, Any]]] = None,
     device_sn_fallback: Optional[str] = None,
     min_mrid: Optional[int] = None,
+    min_timestamp_utc: Optional[int] = None,
 ) -> List[Dict[str, Any]]:
     """Emit one event per ZENTRA measurement reading (15-minute sample).
 
@@ -343,6 +359,7 @@ def flatten_readings(
     compared to ZENTRA Cloud before any dashboard aggregation.
     """
     events: List[Dict[str, Any]] = []
+    seen = set()
     for measurement_name, entries in (measurement_map or {}).items():
         original = str(measurement_name)
         canonical = canonical_measurement_name(original)
@@ -366,8 +383,16 @@ def flatten_readings(
                 if ts is None:
                     continue
                 mrid = _as_int(reading.get("mrid") or reading.get("reading_id"))
-                if min_mrid is not None and mrid is not None and mrid <= int(min_mrid):
+                if _checkpoint_skip(mrid, ts, min_mrid, min_timestamp_utc):
                     continue
+                seen_key = (
+                    original,
+                    int(mrid) if mrid is not None else int(ts),
+                    str(reading.get("sensor_sn") or metadata.get("sensor_sn") or ""),
+                )
+                if seen_key in seen:
+                    continue
+                seen.add(seen_key)
                 event = {
                     "vendor": "METER Group",
                     "product": "ZENTRA Cloud",

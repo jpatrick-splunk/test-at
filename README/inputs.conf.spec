@@ -24,8 +24,9 @@ output_format = <value>
 * pandas.DataFrame(**json.loads(response["data"])) for a full date range.
 
 ignore_checkpoint = <value>
-* If true, ignore saved MRIDs and pull start_date/end_date for lookback_hours.
-* Default: true during validation so a 30-day dump is not reduced to one sample.
+* If true, request start_date/end_date for lookback_hours instead of start_mrid.
+* Already-indexed MRIDs and timestamps are still skipped so repeats are not indexed.
+* Default: false. Set true only for a one-time backfill.
 
 per_page = <value>
 * Readings per API page. Maximum 2000.
@@ -38,4 +39,4 @@ index = <value>
 * If the index does not exist, Splunk drops the events and searches stay empty.
 
 interval = <value>
-* Seconds between polls. Default 60 during validation. ZENTRA allows one call per device per minute.
+* Seconds between polls. Default 900 (15 minutes) to match logger samples.

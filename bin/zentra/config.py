@@ -230,7 +230,7 @@ def stanza_settings(stanza: InputStanza) -> dict:
         "per_page": parse_positive_int(
             stanza.params.get("per_page"), 2000, "per_page", maximum=2000
         ),
-        "ignore_checkpoint": parse_bool(stanza.params.get("ignore_checkpoint"), True),
+        "ignore_checkpoint": parse_bool(stanza.params.get("ignore_checkpoint"), False),
         "output_format": (stanza.params.get("output_format") or "df").strip().lower() or "df",
         "index": stanza.index,
         "sourcetype": stanza.sourcetype,

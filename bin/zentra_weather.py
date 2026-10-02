@@ -64,7 +64,7 @@ SCHEME = """<scheme>
             </arg>
             <arg name="ignore_checkpoint">
                 <title>Ignore checkpoint (full date-range pull)</title>
-                <description>If true, request start_date/end_date for the lookback window instead of start_mrid. Use this to pull 30 days at once. Default true during validation.</description>
+                <description>If true, request start_date/end_date for the lookback window instead of start_mrid. Already-indexed MRIDs and timestamps are still skipped. Leave false after the first successful pull so polls stay incremental. Default false.</description>
                 <required_on_create>false</required_on_create>
                 <required_on_edit>false</required_on_edit>
             </arg>
@@ -167,17 +167,30 @@ def _run_stanza(stanza, checkpoint_dir: str) -> int:
 
 def _poll_device(stanza_name: str, device_sn: str, settings: dict, checkpoint_dir: str) -> int:
     ignore_ckpt = bool(settings.get("ignore_checkpoint"))
-    ckpt = {} if ignore_ckpt else load_checkpoint(checkpoint_dir, device_sn, namespace=stanza_name)
+    ckpt = load_checkpoint(checkpoint_dir, device_sn, namespace=stanza_name)
     last_mrid = ckpt.get("last_mrid")
-    start_mrid = int(last_mrid) + 1 if last_mrid is not None else None
+    last_ts = ckpt.get("last_timestamp_utc")
+    # Always skip already-indexed samples, even on a date-range pull. Otherwise
+    # ignore_checkpoint=1 plus a 60s interval re-indexes the same 30 days.
+    min_mrid = int(last_mrid) if last_mrid is not None else None
+    min_ts = int(last_ts) if last_ts is not None else None
+    start_mrid = None if ignore_ckpt else (int(last_mrid) + 1 if last_mrid is not None else None)
     start_date = end_date = None
     lookback = int(settings["lookback_hours"])
     output_format = settings.get("output_format") or "df"
+    if ignore_ckpt:
+        log(
+            "ignore_checkpoint=1 on %s: requesting lookback but skipping mrid<=%s ts<=%s. "
+            "Set ignore_checkpoint=0 after the first pull to avoid duplicate events."
+            % (device_sn, min_mrid, min_ts)
+        )
     # Official v4 docs: use start_date/end_date OR start_mrid/end_mrid, not both.
-    # start_date overrides start_mrid. A 30-day validation pull always uses dates.
     if start_mrid is None:
         end_dt = datetime.now(timezone.utc)
-        start_dt = end_dt - timedelta(hours=lookback)
+        if (not ignore_ckpt) and last_ts is not None:
+            start_dt = datetime.fromtimestamp(int(last_ts), tz=timezone.utc)
+        else:
+            start_dt = end_dt - timedelta(hours=lookback)
         start_date = start_dt.strftime("%Y-%m-%d %H:%M:%S")
         end_date = end_dt.strftime("%Y-%m-%d %H:%M:%S")
         log(
@@ -192,8 +205,7 @@ def _poll_device(stanza_name: str, device_sn: str, settings: dict, checkpoint_di
 
     emitted = 0
     max_mrid = last_mrid
-    max_ts = ckpt.get("last_timestamp_utc")
-    min_mrid = int(last_mrid) if last_mrid is not None else None
+    max_ts = last_ts
 
     try:
         pages = iter_readings_pages(
@@ -220,6 +232,7 @@ def _poll_device(stanza_name: str, device_sn: str, settings: dict, checkpoint_di
                 location_history=location_history,
                 device_sn_fallback=device_sn,
                 min_mrid=min_mrid,
+                min_timestamp_utc=min_ts,
             )
             page_emitted = 0
             for event in events:

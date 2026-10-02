@@ -409,6 +409,39 @@ class NormalizeTests(unittest.TestCase):
         self.assertEqual(events[0]["tz_offset"], -18000)
         self.assertEqual(events[0]["logger_day"], "2026-10-01")
 
+    def test_flatten_skips_by_timestamp_when_mrid_missing(self):
+        mapping = {
+            "Precipitation": [
+                {
+                    "metadata": {"units": "mm"},
+                    "readings": [
+                        {"datetime": "2026-10-01 12:00:00-05:00", "value": 0.4},
+                        {"datetime": "2026-10-01 12:15:00-05:00", "value": 0.1},
+                    ],
+                }
+            ]
+        }
+        first = flatten_readings(mapping)
+        cutoff = first[0]["timestamp_utc"]
+        later = flatten_readings(mapping, min_timestamp_utc=cutoff)
+        self.assertEqual(len(later), 1)
+        self.assertEqual(later[0]["value"], 0.1)
+
+    def test_flatten_dedupes_duplicate_rows(self):
+        mapping = {
+            "Precipitation": [
+                {
+                    "metadata": {"units": "mm", "sensor_sn": "a41-1"},
+                    "readings": [
+                        {"datetime": "2026-10-01 12:00:00-05:00", "value": 0.4, "mrid": 9},
+                        {"datetime": "2026-10-01 12:00:00-05:00", "value": 0.4, "mrid": 9},
+                    ],
+                }
+            ]
+        }
+        events = flatten_readings(mapping)
+        self.assertEqual(len(events), 1)
+
 
 if __name__ == "__main__":
     unittest.main()

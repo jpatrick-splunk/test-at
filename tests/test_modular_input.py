@@ -119,6 +119,26 @@ class RunTests(unittest.TestCase):
             kwargs = pages.call_args.kwargs
             self.assertEqual(kwargs["start_mrid"], 101)
 
+    def test_ignore_checkpoint_still_skips_already_indexed(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            ckpt_dir = Path(tmp, "zentra_weather_validate")
+            ckpt_dir.mkdir()
+            (ckpt_dir / "z6-30302.json").write_text(
+                json.dumps({"last_mrid": 101, "last_timestamp_utc": 1720000900, "device_sn": "z6-30302"}),
+                encoding="utf-8",
+            )
+            xml = RUN_XML_TEMPLATE.format(checkpoint_dir=tmp, devices="z6-30302").replace(
+                "<param name=\"ignore_checkpoint\">0</param>",
+                "<param name=\"ignore_checkpoint\">1</param>",
+            )
+            with patch("zentra_weather.iter_readings_pages", return_value=[FIXTURE]) as pages, patch(
+                "zentra_weather.start_stream"
+            ), patch("zentra_weather.end_stream"), patch("zentra_weather.write_event") as write_event:
+                mi.run(xml)
+            self.assertEqual(write_event.call_count, 0)
+            self.assertIsNone(pages.call_args.kwargs.get("start_mrid"))
+            self.assertIsNotNone(pages.call_args.kwargs.get("start_date"))
+
 
 class StreamTests(unittest.TestCase):
     def test_event_xml_escapes_payload(self):
@@ -245,6 +265,8 @@ class AppPackagingTests(unittest.TestCase):
         self.assertIn("device_sns = z6-30302", text)
         self.assertIn("index = zentra_validate", text)
         self.assertIn("sourcetype = zentra:reading", text)
+        self.assertIn("ignore_checkpoint = 0", text)
+        self.assertIn("interval = 900", text)
         self.assertNotRegex(text, r"(?i)^api_token\s*=\s*\S+", "token must not be hardcoded")
 
     def test_python_sources_compile(self):
