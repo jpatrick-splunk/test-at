@@ -240,11 +240,12 @@ def _poll_device(stanza_name: str, device_sn: str, settings: dict, checkpoint_di
                 if ts is not None:
                     max_ts = ts if max_ts is None else max(int(max_ts), int(ts))
             log(
-                "device %s page %s measurements=%s events=%s total_emitted=%s index=%s"
+                "device %s page %s measurements=%s sample=%s events=%s total_emitted=%s index=%s"
                 % (
                     device_sn,
                     page_num,
                     len(measurement_map),
+                    ",".join(sorted(str(name) for name in measurement_map)[:8]) or "-",
                     page_emitted,
                     emitted,
                     settings["index"],

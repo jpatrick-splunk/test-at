@@ -207,10 +207,15 @@ def next_page_number(payload: Dict[str, Any], current_page: int, per_page: int) 
         if "next_page" in pagination and pagination.get("next_page") in (None, False, 0, "null"):
             return None
 
+    # Count dataframe rows, not exploded cells. A long-format table has one
+    # reading per row (measurement, value, units, …); a wide table has one
+    # timestamp per row. Either way the API's per_page applies to those rows.
+    row_count = _payload_split_row_count(payload)
+    if row_count is not None:
+        return current_page + 1 if row_count == per_page else None
+
     measurement_map, _ = extract_measurement_map(payload)
     reading_count = count_readings(measurement_map)
-    # A dataframe dump can return the whole date range in one payload. Only
-    # request another page when this one is exactly full.
     if reading_count == per_page:
         return current_page + 1
     return None
@@ -263,8 +268,47 @@ def _coerce_json_container(value: Any) -> Any:
     return value
 
 
-def _pandas_split_to_map(obj: Any) -> Optional[Dict[str, Any]]:
-    """Convert a pandas ``orient=split`` table (ZENTRA output_format=df/json)."""
+# Columns that describe a reading in a long-format dataframe. These are not
+# ZENTRA sensor names; treating them as measurements produced index counts
+# like latitude=73922 instead of Precipitation.
+_SPLIT_META_COLUMNS = {
+    "timestamp_utc",
+    "timestamp",
+    "time",
+    "datetime",
+    "date",
+    "mrid",
+    "reading_id",
+    "tz_offset",
+    "error_flag",
+    "error_description",
+    "precision",
+    "index",
+    "latitude",
+    "longitude",
+    "altitude",
+    "lat",
+    "lon",
+    "measurement",
+    "measurement_name",
+    "port_num",
+    "port_number",
+    "sensor_meta_errors",
+    "sensor_name",
+    "sensor_sn",
+    "sub_sensor_index",
+    "units",
+    "unit",
+    "value",
+    "values",
+    "device_sn",
+    "device_name",
+    "device_id",
+}
+
+
+def _as_split_table(obj: Any) -> Optional[Tuple[List[Any], List[Any]]]:
+    obj = _coerce_json_container(obj)
     if not isinstance(obj, dict):
         return None
     columns = obj.get("columns")
@@ -273,7 +317,58 @@ def _pandas_split_to_map(obj: Any) -> Optional[Dict[str, Any]]:
         return None
     if obj.get("readings") or obj.get("metadata"):
         return None
+    return columns, rows
+
+
+def _payload_split_row_count(payload: Any) -> Optional[int]:
+    payload = _coerce_json_container(payload)
+    candidates: List[Any] = [payload]
+    if isinstance(payload, dict) and "data" in payload:
+        candidates.append(_coerce_json_container(payload.get("data")))
+    for obj in candidates:
+        table = _as_split_table(obj)
+        if table is not None:
+            return len(table[1])
+    return None
+
+
+def _split_rows_to_records(columns: List[Any], rows: List[Any]) -> List[Dict[str, Any]]:
+    names: List[str] = []
+    for col in columns:
+        if isinstance(col, (list, tuple)):
+            col = " ".join(str(part) for part in col if part not in (None, ""))
+        names.append(str(col))
+    records: List[Dict[str, Any]] = []
+    for row in rows:
+        if not isinstance(row, list):
+            continue
+        records.append({names[index]: row[index] for index in range(min(len(names), len(row)))})
+    return records
+
+
+def _record_get(item: Dict[str, Any], *names: str) -> Any:
+    for name in names:
+        if name in item and item[name] is not None:
+            return item[name]
+    lowered = {str(key).strip().lower(): value for key, value in item.items()}
+    for name in names:
+        value = lowered.get(str(name).strip().lower())
+        if value is not None:
+            return value
+    return None
+
+
+def _pandas_split_to_map(obj: Any) -> Optional[Dict[str, Any]]:
+    """Convert a pandas ``orient=split`` table (ZENTRA output_format=df/json)."""
+    table = _as_split_table(obj)
+    if table is None:
+        return None
+    columns, rows = table
     lower = [str(col).strip().lower() for col in columns]
+    if ("measurement" in lower or "measurement_name" in lower) and (
+        "value" in lower or "values" in lower
+    ):
+        return _values_list_to_map(_split_rows_to_records(columns, rows))
 
     def _idx(*names: str) -> Optional[int]:
         for name in names:
@@ -284,21 +379,7 @@ def _pandas_split_to_map(obj: Any) -> Optional[Dict[str, Any]]:
     ts_idx = _idx("timestamp_utc", "timestamp", "time")
     dt_idx = _idx("datetime", "date")
     mrid_idx = _idx("mrid", "reading_id")
-    skip_names = {
-        "timestamp_utc",
-        "timestamp",
-        "time",
-        "datetime",
-        "date",
-        "mrid",
-        "reading_id",
-        "tz_offset",
-        "error_flag",
-        "error_description",
-        "precision",
-        "index",
-    }
-    skip = {i for i, name in enumerate(lower) if name in skip_names}
+    skip = {i for i, name in enumerate(lower) if name in _SPLIT_META_COLUMNS}
     mapping: Dict[str, Any] = {}
     for col_idx, col in enumerate(columns):
         if col_idx in skip:
@@ -326,36 +407,58 @@ def _pandas_split_to_map(obj: Any) -> Optional[Dict[str, Any]]:
     return mapping or None
 
 
+def _normalize_meta_errors(raw: Any) -> List[Any]:
+    if raw is None or raw is False:
+        return []
+    if isinstance(raw, list):
+        return [item for item in raw if item not in (None, "", [])]
+    if isinstance(raw, str):
+        text = raw.strip()
+        if not text or text in ("[]", "{}", "null", "None", "nan"):
+            return []
+        return [text]
+    return [raw]
+
+
 def _values_list_to_map(values: Any) -> Optional[Dict[str, Any]]:
-    """Convert v5-style long rows: ``{measurement, value, timestamp, ...}``."""
+    """Convert long rows: ``{measurement, value, timestamp, ...}``."""
     if not isinstance(values, list) or not values or not isinstance(values[0], dict):
         return None
     sample = values[0]
-    if "measurement" not in sample and "measurement_name" not in sample:
+    if _record_get(sample, "measurement", "measurement_name") is None:
         return None
     mapping: Dict[str, Any] = {}
     for item in values:
         if not isinstance(item, dict):
             continue
-        name = item.get("measurement") or item.get("measurement_name")
+        name = _record_get(item, "measurement", "measurement_name")
         if not name:
             continue
         metadata = {
-            "device_sn": item.get("device_sn") or item.get("device_id"),
-            "device_name": item.get("device_name"),
-            "sensor_name": item.get("sensor_name"),
-            "sensor_sn": item.get("sensor_sn"),
-            "port_number": item.get("port_num") if item.get("port_num") is not None else item.get("port_number"),
-            "units": item.get("unit") or item.get("units"),
+            "device_sn": _record_get(item, "device_sn", "device_id"),
+            "device_name": _record_get(item, "device_name"),
+            "sensor_name": _record_get(item, "sensor_name"),
+            "sensor_sn": _record_get(item, "sensor_sn"),
+            "port_number": _record_get(item, "port_num", "port_number"),
+            "units": _record_get(item, "units", "unit"),
+            "sub_sensor_index": _record_get(item, "sub_sensor_index"),
+            "latitude": _record_get(item, "latitude", "Latitude", "lat"),
+            "longitude": _record_get(item, "longitude", "Longitude", "lon"),
+            "errors": _normalize_meta_errors(
+                _record_get(item, "sensor_meta_errors", "errors", "metadata_errors")
+            ),
         }
-        error_code = item.get("error_code")
+        error_code = _record_get(item, "error_code")
+        error_flag = _record_get(item, "error_flag")
         reading = {
-            "timestamp_utc": item.get("timestamp_utc", item.get("timestamp")),
-            "datetime": item.get("datetime"),
-            "value": item.get("value"),
-            "mrid": item.get("mrid", item.get("reading_id")),
-            "error_flag": bool(error_code) if error_code not in (None, 0, "0") else bool(item.get("error_flag")),
-            "error_description": item.get("error_description"),
+            "timestamp_utc": _record_get(item, "timestamp_utc", "timestamp"),
+            "datetime": _record_get(item, "datetime"),
+            "value": _record_get(item, "value", "values"),
+            "mrid": _record_get(item, "mrid", "reading_id"),
+            "error_flag": bool(error_code) if error_code not in (None, 0, "0") else bool(error_flag),
+            "error_description": _record_get(item, "error_description"),
+            "tz_offset": _record_get(item, "tz_offset"),
+            "precision": _record_get(item, "precision"),
         }
         mapping.setdefault(str(name), []).append({"metadata": metadata, "readings": [reading]})
     return mapping or None

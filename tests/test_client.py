@@ -120,6 +120,32 @@ class ClientTests(unittest.TestCase):
         }
         self.assertIsNone(next_page_number(payload, 1, 2000))
 
+    def test_long_format_full_page_requests_next(self):
+        payload = {
+            "data": json.dumps(
+                {
+                    "columns": ["timestamp_utc", "measurement", "value", "latitude"],
+                    "data": [
+                        [1720000000 + i, "Precipitation", 0.1, 46.75] for i in range(2000)
+                    ],
+                }
+            )
+        }
+        self.assertEqual(next_page_number(payload, 1, 2000), 2)
+
+    def test_long_format_partial_page_stops(self):
+        payload = {
+            "data": json.dumps(
+                {
+                    "columns": ["timestamp_utc", "measurement", "value", "latitude"],
+                    "data": [
+                        [1720000000 + i, "Precipitation", 0.1, 46.75] for i in range(1999)
+                    ],
+                }
+            )
+        }
+        self.assertIsNone(next_page_number(payload, 1, 2000))
+
     def test_iter_pages_stops_and_sleeps_between_pages(self):
         calls = {"n": 0, "sleeps": []}
 

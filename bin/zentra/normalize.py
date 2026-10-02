@@ -509,6 +509,10 @@ def _merge_identity(
         ("sensor_name", "sensor_name"),
         ("port_number", "port_number"),
         ("port_num", "port_number"),
+        ("sub_sensor_index", "sub_sensor_index"),
+        ("latitude", "latitude"),
+        ("longitude", "longitude"),
+        ("altitude", "altitude"),
     ):
         value = metadata.get(src)
         if value is not None and dest not in event:

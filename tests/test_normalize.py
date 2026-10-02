@@ -156,6 +156,83 @@ class NormalizeTests(unittest.TestCase):
         self.assertEqual(events[0]["air_temperature"], 24.7)
         self.assertEqual(events[0]["precipitation"], 1.2)
 
+    def test_long_format_dataframe_uses_measurement_column(self):
+        payload = {
+            "data": json.dumps(
+                {
+                    "columns": [
+                        "timestamp_utc",
+                        "measurement",
+                        "value",
+                        "units",
+                        "sensor_name",
+                        "sensor_sn",
+                        "port_num",
+                        "sub_sensor_index",
+                        "sensor_meta_errors",
+                        "latitude",
+                        "longitude",
+                    ],
+                    "data": [
+                        [
+                            1720000000,
+                            "Precipitation",
+                            1.2,
+                            "mm",
+                            "ATMOS 41",
+                            "a41-1",
+                            1,
+                            0,
+                            [],
+                            46.75,
+                            -117.18,
+                        ],
+                        [
+                            1720000000,
+                            "Air Temperature",
+                            24.7,
+                            "°C",
+                            "ATMOS 41",
+                            "a41-1",
+                            1,
+                            0,
+                            [],
+                            46.75,
+                            -117.18,
+                        ],
+                        [
+                            1720000900,
+                            "Precipitation",
+                            0.0,
+                            "mm",
+                            "ATMOS 41",
+                            "a41-1",
+                            1,
+                            0,
+                            [],
+                            46.75,
+                            -117.18,
+                        ],
+                    ],
+                }
+            )
+        }
+        mapping, _history = extract_measurement_map(payload)
+        self.assertEqual(set(mapping), {"Precipitation", "Air Temperature"})
+        self.assertNotIn("latitude", mapping)
+        self.assertNotIn("value", mapping)
+        events = flatten_readings(mapping, device_sn_fallback="z6-30302")
+        self.assertEqual(len(events), 3)
+        names = sorted({event["measurement"] for event in events})
+        self.assertEqual(names, ["Air Temperature", "Precipitation"])
+        precip = [event for event in events if event["measurement"] == "Precipitation"]
+        self.assertEqual([event["value"] for event in precip], [1.2, 0.0])
+        self.assertEqual(precip[0]["units"], "mm")
+        self.assertEqual(precip[0]["measurement_canonical"], "precipitation")
+        self.assertEqual(precip[0]["sensor_sn"], "a41-1")
+        self.assertAlmostEqual(precip[0]["latitude"], 46.75)
+        self.assertAlmostEqual(precip[0]["longitude"], -117.18)
+
     def test_v5_values_payload(self):
         payload = {
             "metadata": {"device_id": "z6-30302"},
