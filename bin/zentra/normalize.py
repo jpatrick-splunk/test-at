@@ -181,9 +181,12 @@ def describe_measurement_map(measurement_map: Dict[str, Any]) -> str:
             raw_key = key
             break
     rows = entry_readings(entry)
+    first = rows[0] if rows else None
+    first_keys = sorted(first.keys()) if isinstance(first, dict) else None
+    ts = _reading_timestamp(first) if isinstance(first, dict) else None
     return (
         "measurement=%s entry_keys=%s sample_key=%s sample_type=%s "
-        "sample_len=%s parsed_rows=%s"
+        "sample_len=%s parsed_rows=%s first_row_keys=%s timestamp=%s"
         % (
             name,
             sorted(entry.keys()),
@@ -191,6 +194,8 @@ def describe_measurement_map(measurement_map: Dict[str, Any]) -> str:
             type(raw).__name__,
             len(raw) if isinstance(raw, (list, dict)) else None,
             len(rows),
+            first_keys,
+            ts,
         )
     )
 
@@ -226,15 +231,32 @@ def _coerce_reading_list(raw: Any) -> List[Dict[str, Any]]:
         return []
     if not isinstance(raw, list) or not raw:
         return []
-    if all(isinstance(item, dict) for item in raw):
-        return [item for item in raw if isinstance(item, dict)]
-    rows = []
+    rows: List[Dict[str, Any]] = []
     for item in raw:
         if isinstance(item, dict):
-            rows.append(item)
+            rows.extend(_expand_reading_dict(item))
         elif isinstance(item, (list, tuple)) and item:
             rows.append(_sequence_to_reading(item))
     return rows
+
+
+def _expand_reading_dict(item: Dict[str, Any]) -> List[Dict[str, Any]]:
+    if _looks_columnar(item):
+        return _columnar_to_readings(item)
+    nested: List[Dict[str, Any]] = []
+    for key in READING_LIST_KEYS:
+        if key in item:
+            nested = _coerce_reading_list(item.get(key))
+            if nested:
+                return nested
+    return [item]
+
+
+def _looks_columnar(obj: Dict[str, Any]) -> bool:
+    for key in ("timestamp_utc", "timestamp", "timestamps", "time", "datetime", "value", "values"):
+        if isinstance(obj.get(key), list) and obj.get(key):
+            return True
+    return False
 
 
 def _columnar_to_readings(obj: Dict[str, Any]) -> List[Dict[str, Any]]:
@@ -462,15 +484,32 @@ def _merge_identity(
 
 
 def _reading_timestamp(reading: Dict[str, Any]) -> Optional[int]:
-    for key in ("timestamp_utc", "timestamp", "time"):
-        ts = _as_int(reading.get(key))
+    if not isinstance(reading, dict):
+        return None
+    for key in (
+        "timestamp_utc",
+        "timestamp",
+        "timestamps",
+        "time",
+        "datetime",
+        "date_time",
+        "date",
+        "measured_at",
+        "ts",
+        "epoch",
+    ):
+        value = reading.get(key)
+        if value is None:
+            continue
+        ts = _as_int(value)
         if ts is not None:
+            if ts > 1000000000000:
+                ts = ts // 1000
             return ts
-    dt = reading.get("datetime")
-    if isinstance(dt, str) and dt.strip():
-        parsed = _parse_datetime(dt.strip())
-        if parsed is not None:
-            return parsed
+        if isinstance(value, str) and value.strip():
+            parsed = _parse_datetime(value.strip())
+            if parsed is not None:
+                return parsed
     return None
 
 
@@ -517,11 +556,18 @@ def _coords_from_entry(entry: Dict[str, Any]) -> Optional[Dict[str, float]]:
 
 
 def _as_int(value: Any) -> Optional[int]:
-    if value is None or value is False:
+    if value is None or isinstance(value, (bool, list, dict, tuple)):
         return None
     try:
+        if isinstance(value, str):
+            text = value.strip()
+            if not text:
+                return None
+            return int(float(text)) if any(ch in text for ch in ".eE") else int(text)
+        if isinstance(value, float):
+            return int(value)
         return int(value)
-    except (TypeError, ValueError):
+    except (TypeError, ValueError, OverflowError):
         return None
 
 

@@ -229,6 +229,46 @@ class NormalizeTests(unittest.TestCase):
         self.assertEqual(events[0]["value"], 24.7)
         self.assertEqual(events[0]["measurement"], "Air Temperature")
 
+    def test_list_of_one_columnar_dict(self):
+        mapping = {
+            "Air Temperature": [
+                {
+                    "metadata": {"device_sn": "z6-30302", "units": "°C"},
+                    "readings": [
+                        {
+                            "timestamp_utc": [1720000000, 1720000900],
+                            "value": [24.7, 25.1],
+                            "mrid": [100, 101],
+                        }
+                    ],
+                }
+            ]
+        }
+        events = flatten_readings(mapping, device_sn_fallback="z6-30302")
+        self.assertEqual(len(events), 2)
+        self.assertEqual(events[0]["value"], 24.7)
+        self.assertEqual(events[1]["value"], 25.1)
+
+    def test_datetime_only_reading(self):
+        mapping = {
+            "Air Temperature": [
+                {
+                    "metadata": {"units": "°C"},
+                    "readings": [
+                        {
+                            "datetime": "2026-10-01 12:00:00-05:00",
+                            "value": 18.2,
+                            "mrid": 9,
+                        }
+                    ],
+                }
+            ]
+        }
+        events = flatten_readings(mapping)
+        self.assertEqual(len(events), 1)
+        self.assertEqual(events[0]["value"], 18.2)
+        self.assertTrue(events[0]["timestamp_utc"])
+
 
 if __name__ == "__main__":
     unittest.main()
