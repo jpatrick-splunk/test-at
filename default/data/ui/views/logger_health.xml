@@ -1,0 +1,200 @@
+<dashboard version="2" theme="light">
+    <label>Logger health</label>
+    <description>Outages, missed readings, and sensor errors for each place.</description>
+    <definition><![CDATA[
+{
+  "title": "Logger health",
+  "description": "Outages, missed readings, and sensor errors for each place.",
+  "visualizations": {
+    "viz_note": {
+      "type": "splunk.markdown",
+      "options": {
+        "markdown": "Each logger is expected every 15 minutes, 96 times on a complete day. On time means a reading arrived in the last 90 minutes. File import only means Splunk has not stored a live reading for that logger yet. Indexed history starts 2025-05-27 14:15 for all three loggers. The daily chart counts each 15-minute time once, so a day still in progress stays under 96. The table lists gaps of 30 minutes or longer. The 2025-11-02 gap on every logger is the daylight saving time change. Battery charge has stayed at 100 percent, and battery voltage has stayed between about 7.8 and 8.9 volts."
+      }
+    },
+    "viz_status": {
+      "type": "splunk.table",
+      "title": "Logger status",
+      "dataSources": {
+        "primary": "ds_status"
+      },
+      "options": {
+        "count": 10
+      }
+    },
+    "viz_outages": {
+      "type": "splunk.table",
+      "title": "Gaps of 30 minutes or more",
+      "dataSources": {
+        "primary": "ds_outages"
+      },
+      "options": {
+        "count": 20
+      }
+    },
+    "viz_coverage": {
+      "type": "splunk.column",
+      "title": "Readings per day, last 30 days (96 is a finished day)",
+      "dataSources": {
+        "primary": "ds_coverage"
+      },
+      "options": {
+        "yAxisTitleText": "readings",
+        "legendDisplay": "bottom",
+        "seriesColors": [
+          "#1B5E20",
+          "#1565C0",
+          "#6D4C41"
+        ]
+      }
+    },
+    "viz_errors": {
+      "type": "splunk.table",
+      "title": "Sensor errors",
+      "dataSources": {
+        "primary": "ds_errors"
+      },
+      "options": {
+        "count": 10
+      }
+    }
+  },
+  "dataSources": {
+    "ds_status": {
+      "type": "ds.search",
+      "name": "Status",
+      "options": {
+        "query": "search `zentra_named(Air Temperature)`\n| `zentra_with_place`\n| stats max(_time) as last_time min(_time) as first_time max(datetime) as last_reading min(datetime) as history_starts latest(source) as latest_source dc(datetime) as readings by place county device_sn\n| join type=left place [\n    search earliest=-2d `zentra_named(Battery Percent)`\n    | `zentra_with_place`\n    | stats latest(value) as battery_pct by place\n]\n| join type=left place [\n    search earliest=-2d `zentra_named(Battery Voltage)`\n    | `zentra_with_place`\n    | stats latest(value) as battery_mv by place\n]\n| eval minutes_since=round((now()-last_time)/60,0)\n| eval status=case(minutes_since<=90, \"On time\", minutes_since<=360, \"Behind\", true(), \"Not reporting\")\n| eval collection=if(match(latest_source, \"^zentra_weather://\"), \"Live\", \"File import only\")\n| eval battery_pct=round(battery_pct,0)\n| eval battery_volts=round(battery_mv/1000,2)\n| eval expected=round((last_time-first_time)/900,0)+1\n| eval coverage_pct=round(100*readings/expected,1)\n| eval rank=case(status=\"Not reporting\", 0, status=\"Behind\", 1, true(), 2)\n| table place county status last_reading minutes_since collection battery_pct battery_volts coverage_pct history_starts device_sn\n| sort rank place\n| fields - rank\n| rename place as Place county as County status as Status last_reading as \"Last reading\" minutes_since as \"Minutes since\" collection as Collection battery_pct as \"Battery %\" battery_volts as \"Battery volts\" coverage_pct as \"Coverage %\" history_starts as \"History starts\" device_sn as Serial",
+        "queryParameters": {
+          "earliest": "-2y@d",
+          "latest": "now"
+        }
+      }
+    },
+    "ds_outages": {
+      "type": "ds.search",
+      "name": "Outages",
+      "options": {
+        "query": "search `zentra_named(Air Temperature)`\n| `zentra_with_place`\n| sort 0 device_sn _time\n| streamstats current=f window=1 last(_time) as prev last(datetime) as prev_dt last(tz_offset) as prev_tz by device_sn\n| eval gap_min=round((_time-prev)/60,0)\n| where gap_min>=30\n| eval kind=case(abs(tz_offset-prev_tz)>=1800 AND gap_min<=90, \"Clock change\", gap_min>=60, \"Outage\", true(), \"Missed readings\")\n| eval hours=round(gap_min/60,1)\n| eval from=prev_dt, to=datetime\n| table place kind from to hours device_sn\n| append [\n    search `zentra_named(Air Temperature)`\n    | `zentra_with_place`\n    | stats max(_time) as last_time max(datetime) as from by place device_sn\n    | where now()-last_time>5400\n    | eval kind=\"Still behind\"\n    | eval to=strftime(now(), \"%Y-%m-%d %H:%M:%S\")\n    | eval hours=round((now()-last_time)/3600,1)\n    | table place kind from to hours device_sn\n]\n| sort - from\n| rename place as Place kind as Kind from as From to as To hours as Hours device_sn as Serial",
+        "queryParameters": {
+          "earliest": "-2y@d",
+          "latest": "now"
+        }
+      }
+    },
+    "ds_coverage": {
+      "type": "ds.search",
+      "name": "Coverage",
+      "options": {
+        "query": "search `zentra_named(Air Temperature)`\n| `zentra_with_place`\n| timechart span=1d dc(datetime) as readings by place",
+        "queryParameters": {
+          "earliest": "-30d@d",
+          "latest": "now"
+        }
+      }
+    },
+    "ds_errors": {
+      "type": "ds.search",
+      "name": "Errors",
+      "options": {
+        "query": "search `zentra_weather_search` error_description=*\n| `zentra_with_place`\n| stats count as readings min(datetime) as from max(datetime) as to by place measurement error_description\n| sort place measurement\n| rename place as Place measurement as Measurement error_description as Error readings as Readings from as From to as To",
+        "queryParameters": {
+          "earliest": "-2y@d",
+          "latest": "now"
+        }
+      }
+    }
+  },
+  "defaults": {
+    "dataSources": {
+      "ds.search": {
+        "options": {
+          "queryParameters": {}
+        }
+      }
+    }
+  },
+  "inputs": {},
+  "layout": {
+    "tabs": {
+      "items": [
+        {
+          "layoutId": "layout_1",
+          "label": "Health"
+        }
+      ]
+    },
+    "layoutDefinitions": {
+      "layout_1": {
+        "type": "grid",
+        "options": {
+          "width": 1440,
+          "height": 1280,
+          "display": "auto-scale"
+        },
+        "structure": [
+          {
+            "item": "viz_note",
+            "type": "block",
+            "position": {
+              "x": 0,
+              "y": 0,
+              "w": 1440,
+              "h": 120
+            }
+          },
+          {
+            "item": "viz_status",
+            "type": "block",
+            "position": {
+              "x": 0,
+              "y": 130,
+              "w": 1440,
+              "h": 260
+            }
+          },
+          {
+            "item": "viz_outages",
+            "type": "block",
+            "position": {
+              "x": 0,
+              "y": 400,
+              "w": 1440,
+              "h": 360
+            }
+          },
+          {
+            "item": "viz_coverage",
+            "type": "block",
+            "position": {
+              "x": 0,
+              "y": 770,
+              "w": 1440,
+              "h": 280
+            }
+          },
+          {
+            "item": "viz_errors",
+            "type": "block",
+            "position": {
+              "x": 0,
+              "y": 1060,
+              "w": 1440,
+              "h": 200
+            }
+          }
+        ]
+      }
+    },
+    "globalInputs": []
+  }
+}
+    ]]></definition>
+    <meta type="hiddenElements"><![CDATA[
+{
+    "hideEdit": false,
+    "hideOpenInSearch": false,
+    "hideExport": false
+}
+    ]]></meta>
+</dashboard>

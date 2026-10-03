@@ -136,6 +136,11 @@ class RunTests(unittest.TestCase):
             self.assertIsNotNone(kwargs.get("start_date"))
             self.assertIsNotNone(kwargs.get("end_date"))
 
+    def test_api_dates_use_logger_local_clock(self):
+        # 2026-09-24 04:30:00 UTC is 2026-09-23 23:30:00 in Central time.
+        moment = datetime(2026, 9, 24, 4, 30, tzinfo=timezone.utc)
+        self.assertEqual(mi._api_local_clock(moment), "2026-09-23 23:30:00")
+
     def test_september_23_checkpoint_catches_up_with_date_range(self):
         # Last indexed ATMOS 41 sample on z6-30302: 2026-09-23 23:45:00-05:00.
         last_ts = 1790225100
@@ -172,8 +177,8 @@ class RunTests(unittest.TestCase):
             self.assertGreaterEqual(pages.call_count, 1)
             kwargs = pages.call_args_list[0].kwargs
             self.assertIsNone(kwargs.get("start_mrid"))
-            self.assertEqual(kwargs.get("start_date"), "2026-09-24 04:30:00")
-            self.assertEqual(kwargs.get("end_date"), "2026-10-02 20:00:00")
+            self.assertEqual(kwargs.get("start_date"), "2026-09-23 23:30:00")
+            self.assertEqual(kwargs.get("end_date"), "2026-10-02 15:00:00")
             logs = stderr.getvalue()
             self.assertIn("window=catch-up", logs)
             self.assertIn("last_mrid=59781", logs)
@@ -217,8 +222,8 @@ class RunTests(unittest.TestCase):
             self.assertIn("window=gap-fill", logs)
             self.assertGreaterEqual(pages.call_count, 2)
             fill = pages.call_args_list[1].kwargs
-            self.assertEqual(fill.get("start_date"), "2026-09-23 19:45:00")
-            self.assertEqual(fill.get("end_date"), "2026-10-02 19:30:00")
+            self.assertEqual(fill.get("start_date"), "2026-09-23 14:45:00")
+            self.assertEqual(fill.get("end_date"), "2026-10-02 14:30:00")
             ckpt = json.loads((ckpt_dir / "z6-30302.json").read_text())
             self.assertTrue(ckpt.get("gap_fill_complete"))
 
@@ -294,7 +299,7 @@ class RunTests(unittest.TestCase):
                 mi.run(xml)
             kwargs = pages.call_args_list[0].kwargs
             self.assertIsNone(kwargs.get("start_mrid"))
-            self.assertEqual(kwargs.get("start_date"), "2026-09-24 04:30:00")
+            self.assertEqual(kwargs.get("start_date"), "2026-09-23 23:30:00")
             logs = stderr.getvalue()
             self.assertIn("resuming from last logger datetime", logs)
             self.assertNotIn("window=lookback ", logs)
@@ -429,6 +434,7 @@ class AppPackagingTests(unittest.TestCase):
             "ranch_overview.xml",
             "place_detail.xml",
             "places.xml",
+            "logger_health.xml",
         ):
             ET.parse(app / "default" / "data" / "ui" / "views" / view)
             text = (app / "default" / "data" / "ui" / "views" / view).read_text()

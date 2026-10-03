@@ -9,7 +9,7 @@
     "viz_note": {
       "type": "splunk.markdown",
       "options": {
-        "markdown": "This week is Sunday through today. This month is the 1st of the month through today. Rain on the last days of September is in the week and not in October. Clark Place, Robert has readings but no map point until that logger is on the live data input."
+        "markdown": "This week is Sunday through today. This month is the 1st of the month through today. Rain on the last days of September is in the week and not in October. Satellite imagery: Esri, Maxar, Earthstar Geographics, and the GIS User Community."
       }
     },
     "viz_map": {
@@ -36,7 +36,9 @@
               "> primary | seriesByName(\"temp_f\")"
             ]
           }
-        ]
+        ],
+        "baseLayerTileServer": "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}",
+        "baseLayerTileServerType": "raster"
       }
     },
     "viz_conditions": {
@@ -88,7 +90,7 @@
       "type": "ds.search",
       "name": "Map points",
       "options": {
-        "query": "`zentra_weather_search` latitude=*\n| `zentra_with_place`\n| stats latest(latitude) as latitude latest(longitude) as longitude by place county device_sn\n| join type=left place [\n    `zentra_named(Air Temperature)`\n    | `zentra_with_place`\n    | stats latest(value) as temp_f by place\n]\n| eval temp_f=round(temp_f, 1)\n| fields place county latitude longitude temp_f",
+        "query": "| inputlookup ranch_places\n| eval place=coalesce(display_name, device_sn)\n| eval latitude=tonumber(latitude), longitude=tonumber(longitude)\n| join type=left place [\n    search earliest=-2d `zentra_weather_search` latitude=*\n    | `zentra_with_place`\n    | stats latest(latitude) as event_latitude latest(longitude) as event_longitude by place\n]\n| eval latitude=coalesce(latitude, event_latitude), longitude=coalesce(longitude, event_longitude)\n| where isnotnull(latitude) AND isnotnull(longitude)\n| join type=left place [\n    search earliest=-2d `zentra_named(Air Temperature)`\n    | `zentra_with_place`\n    | stats latest(value) as temp_f by place\n]\n| eval temp_f=round(temp_f, 1)\n| fields place county latitude longitude temp_f",
         "queryParameters": {
           "earliest": "-2d",
           "latest": "now"
@@ -99,7 +101,7 @@
       "type": "ds.search",
       "name": "Conditions",
       "options": {
-        "query": "`zentra_precip_by_interval`\n| eval day_epoch=strptime(logger_day.\" 12:00:00\", \"%Y-%m-%d %H:%M:%S\")\n| eval today=if(logger_day=strftime(now(), \"%Y-%m-%d\"), value, null())\n| eval this_week=if(relative_time(day_epoch, \"@w\")=relative_time(now(), \"@w\"), value, null())\n| eval this_month=if(logger_day>=strftime(relative_time(now(), \"@mon\"), \"%Y-%m-%d\"), value, null())\n| eval this_year=if(logger_day>=strftime(relative_time(now(), \"@y\"), \"%Y-%m-%d\"), value, null())\n| stats sum(today) as rain_today sum(this_week) as rain_this_week sum(this_month) as rain_this_month sum(this_year) as rain_this_year by place county\n| join type=left place [\n    `zentra_named(Air Temperature)`\n    | `zentra_with_place`\n    | stats latest(value) as temp_f by place\n]\n| join type=left place [\n    `zentra_named(Wind Speed)`\n    | `zentra_with_place`\n    | stats latest(value) as wind_mph by place\n]\n| join type=left place [\n    `zentra_named(Max Air Temperature)`\n    | `zentra_with_place`\n    | where logger_day=strftime(now(), \"%Y-%m-%d\")\n    | stats max(value) as high_f by place\n]\n| join type=left place [\n    `zentra_named(Min Air Temperature)`\n    | `zentra_with_place`\n    | where logger_day=strftime(now(), \"%Y-%m-%d\")\n    | stats min(value) as low_f by place\n]\n| foreach rain_today rain_this_week rain_this_month rain_this_year temp_f wind_mph high_f low_f [ eval <<FIELD>>=round(<<FIELD>>, 3) ]\n| eval temp_f=round(temp_f, 1), wind_mph=round(wind_mph, 1), high_f=round(high_f, 1), low_f=round(low_f, 1)\n| table place county temp_f high_f low_f wind_mph rain_today rain_this_week rain_this_month rain_this_year\n| rename place as Place county as County temp_f as \"Temp F\" high_f as \"High F\" low_f as \"Low F\" wind_mph as \"Wind mph\" rain_today as \"Rain today\" rain_this_week as \"Rain this week\" rain_this_month as \"Rain this month\" rain_this_year as \"Rain this year\"\n| sort Place",
+        "query": "search `zentra_precip_by_interval`\n| eval day_epoch=strptime(logger_day.\" 12:00:00\", \"%Y-%m-%d %H:%M:%S\")\n| eval today=if(logger_day=strftime(now(), \"%Y-%m-%d\"), value, null())\n| eval this_week=if(relative_time(day_epoch, \"@w\")=relative_time(now(), \"@w\"), value, null())\n| eval this_month=if(logger_day>=strftime(relative_time(now(), \"@mon\"), \"%Y-%m-%d\"), value, null())\n| eval this_year=if(logger_day>=strftime(relative_time(now(), \"@y\"), \"%Y-%m-%d\"), value, null())\n| stats sum(today) as rain_today sum(this_week) as rain_this_week sum(this_month) as rain_this_month sum(this_year) as rain_this_year by place county\n| join type=left place [\n    search `zentra_named(Air Temperature)`\n    | `zentra_with_place`\n    | stats latest(value) as temp_f by place\n]\n| join type=left place [\n    search `zentra_named(Wind Speed)`\n    | `zentra_with_place`\n    | stats latest(value) as wind_mph by place\n]\n| join type=left place [\n    search `zentra_named(Max Air Temperature)`\n    | `zentra_with_place`\n    | where logger_day=strftime(now(), \"%Y-%m-%d\")\n    | stats max(value) as high_f by place\n]\n| join type=left place [\n    search `zentra_named(Min Air Temperature)`\n    | `zentra_with_place`\n    | where logger_day=strftime(now(), \"%Y-%m-%d\")\n    | stats min(value) as low_f by place\n]\n| foreach rain_today rain_this_week rain_this_month rain_this_year temp_f wind_mph high_f low_f [ eval <<FIELD>>=round(<<FIELD>>, 3) ]\n| eval temp_f=round(temp_f, 1), wind_mph=round(wind_mph, 1), high_f=round(high_f, 1), low_f=round(low_f, 1)\n| table place county temp_f high_f low_f wind_mph rain_today rain_this_week rain_this_month rain_this_year\n| rename place as Place county as County temp_f as \"Temp F\" high_f as \"High F\" low_f as \"Low F\" wind_mph as \"Wind mph\" rain_today as \"Rain today\" rain_this_week as \"Rain this week\" rain_this_month as \"Rain this month\" rain_this_year as \"Rain this year\"\n| sort Place",
         "queryParameters": {
           "earliest": "@y",
           "latest": "now"
@@ -110,7 +112,7 @@
       "type": "ds.search",
       "name": "Daily rain",
       "options": {
-        "query": "`zentra_precip_by_interval`\n| eval _time=strptime(logger_day.\" 12:00:00\", \"%Y-%m-%d %H:%M:%S\")\n| timechart span=1d sum(value) as inches by place",
+        "query": "search `zentra_precip_by_interval`\n| eval _time=strptime(logger_day.\" 12:00:00\", \"%Y-%m-%d %H:%M:%S\")\n| timechart span=1d sum(value) as inches by place",
         "queryParameters": {
           "earliest": "-30d@d",
           "latest": "now"

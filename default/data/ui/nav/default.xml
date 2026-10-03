@@ -2,6 +2,7 @@
   <view name="ranch_overview" default="true" />
   <view name="place_detail" />
   <view name="places" />
+  <view name="logger_health" />
   <collection label="Collection">
     <view name="weather_overview" />
     <view name="rainfall_totals" />

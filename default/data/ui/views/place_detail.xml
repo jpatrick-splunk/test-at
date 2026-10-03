@@ -84,7 +84,8 @@
         "legendDisplay": "off",
         "seriesColors": [
           "#1B5E20"
-        ]
+        ],
+        "dataValuesDisplay": "all"
       }
     },
     "viz_wind": {
@@ -137,7 +138,7 @@
       "type": "ds.search",
       "name": "Temp now",
       "options": {
-        "query": "`zentra_named(Air Temperature)` | `zentra_with_place` | where place=\"$place$\" | stats latest(value) as temp",
+        "query": "search `zentra_named(Air Temperature)` | `zentra_with_place` | where place=\"$place$\" | stats latest(value) as temp",
         "queryParameters": {
           "earliest": "-2d",
           "latest": "now"
@@ -148,7 +149,7 @@
       "type": "ds.search",
       "name": "Wind now",
       "options": {
-        "query": "`zentra_named(Wind Speed)` | `zentra_with_place` | where place=\"$place$\" | stats latest(value) as wind",
+        "query": "search `zentra_named(Wind Speed)` | `zentra_with_place` | where place=\"$place$\" | stats latest(value) as wind",
         "queryParameters": {
           "earliest": "-2d",
           "latest": "now"
@@ -159,7 +160,7 @@
       "type": "ds.search",
       "name": "Rain today",
       "options": {
-        "query": "`zentra_precip_by_interval` | where place=\"$place$\" AND logger_day=strftime(now(), \"%Y-%m-%d\") | stats sum(value) as inches",
+        "query": "search `zentra_precip_by_interval` | where place=\"$place$\" AND logger_day=strftime(now(), \"%Y-%m-%d\") | stats sum(value) as inches",
         "queryParameters": {
           "earliest": "-2d@d",
           "latest": "now"
@@ -170,7 +171,7 @@
       "type": "ds.search",
       "name": "High",
       "options": {
-        "query": "`zentra_named(Max Air Temperature)` | `zentra_with_place` | where place=\"$place$\" AND logger_day=strftime(now(), \"%Y-%m-%d\") | stats max(value) as high",
+        "query": "search `zentra_named(Max Air Temperature)` | `zentra_with_place` | where place=\"$place$\" AND logger_day=strftime(now(), \"%Y-%m-%d\") | stats max(value) as high",
         "queryParameters": {
           "earliest": "-2d@d",
           "latest": "now"
@@ -181,7 +182,7 @@
       "type": "ds.search",
       "name": "Low",
       "options": {
-        "query": "`zentra_named(Min Air Temperature)` | `zentra_with_place` | where place=\"$place$\" AND logger_day=strftime(now(), \"%Y-%m-%d\") | stats min(value) as low",
+        "query": "search `zentra_named(Min Air Temperature)` | `zentra_with_place` | where place=\"$place$\" AND logger_day=strftime(now(), \"%Y-%m-%d\") | stats min(value) as low",
         "queryParameters": {
           "earliest": "-2d@d",
           "latest": "now"
@@ -192,7 +193,7 @@
       "type": "ds.search",
       "name": "Temp chart",
       "options": {
-        "query": "`zentra_named(Air Temperature)` | `zentra_with_place` | where place=\"$place$\" | timechart span=15m avg(value) as temp_f",
+        "query": "search `zentra_named(Air Temperature)` | `zentra_with_place` | where place=\"$place$\" | timechart span=15m avg(value) as temp_f",
         "queryParameters": {
           "earliest": "-7d",
           "latest": "now"
@@ -203,7 +204,7 @@
       "type": "ds.search",
       "name": "Rain chart",
       "options": {
-        "query": "`zentra_precip_by_interval` | where place=\"$place$\"\n| eval _time=strptime(logger_day.\" 12:00:00\", \"%Y-%m-%d %H:%M:%S\")\n| timechart span=1d sum(value) as inches\n| eval inches=round(inches, 2)",
+        "query": "search `zentra_precip_by_interval`\n| where place=\"$place$\"\n| stats sum(value) as inches by logger_day\n| eval inches=if(inches>0, round(inches, 3), null())\n| where isnotnull(inches)\n| eval _time=strptime(logger_day.\" 12:00:00\", \"%Y-%m-%d %H:%M:%S\")\n| table _time inches",
         "queryParameters": {
           "earliest": "-30d@d",
           "latest": "now"
@@ -214,7 +215,7 @@
       "type": "ds.search",
       "name": "Wind chart",
       "options": {
-        "query": "`zentra_named(Wind Speed)` | `zentra_with_place` | where place=\"$place$\" | timechart span=15m avg(value) as wind_mph",
+        "query": "search `zentra_named(Wind Speed)` | `zentra_with_place` | where place=\"$place$\" | timechart span=15m avg(value) as wind_mph",
         "queryParameters": {
           "earliest": "-24h",
           "latest": "now"
@@ -225,7 +226,7 @@
       "type": "ds.search",
       "name": "Soil moisture",
       "options": {
-        "query": "`zentra_named(Water Content)` | `zentra_with_place` | where place=\"$place$\"\n| eval sensor=\"Port \".port_number\n| timechart span=1h avg(value) by sensor",
+        "query": "search `zentra_named(Water Content)` | `zentra_with_place` | where place=\"$place$\"\n| eval sensor=\"Port \".port_number\n| timechart span=1h avg(value) by sensor",
         "queryParameters": {
           "earliest": "-7d",
           "latest": "now"
@@ -236,7 +237,7 @@
       "type": "ds.search",
       "name": "Soil temperature",
       "options": {
-        "query": "`zentra_named(Soil Temperature)` | `zentra_with_place` | where place=\"$place$\"\n| eval sensor=\"Port \".port_number\n| timechart span=1h avg(value) by sensor",
+        "query": "search `zentra_named(Soil Temperature)` | `zentra_with_place` | where place=\"$place$\"\n| eval sensor=\"Port \".port_number\n| timechart span=1h avg(value) by sensor",
         "queryParameters": {
           "earliest": "-7d",
           "latest": "now"

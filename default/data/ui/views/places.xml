@@ -36,7 +36,7 @@
       "type": "ds.search",
       "name": "Place table",
       "options": {
-        "query": "| inputlookup ranch_places | table device_sn display_name county | rename device_sn as Serial display_name as Place county as County | sort Place",
+        "query": "| inputlookup ranch_places | table device_sn display_name county latitude longitude elevation_ft | rename device_sn as Serial display_name as Place county as County latitude as Latitude longitude as Longitude elevation_ft as \"Elevation ft\" | sort Place",
         "queryParameters": {
           "earliest": "-5m",
           "latest": "now"
@@ -47,7 +47,7 @@
       "type": "ds.search",
       "name": "Save place",
       "options": {
-        "query": "| inputlookup ranch_places\n| append [\n    | makeresults\n    | eval device_sn=$device_sn|s$, display_name=$display_name|s$, county=$county|s$\n    | where match(device_sn, \"^[A-Za-z0-9][A-Za-z0-9._-]*$\") AND display_name!=\"\" AND county!=\"\"\n]\n| stats last(display_name) as display_name last(county) as county by device_sn\n| outputlookup ranch_places\n| stats count as places",
+        "query": "| inputlookup ranch_places\n| append [\n    | makeresults\n    | eval device_sn=$device_sn|s$, display_name=$display_name|s$, county=$county|s$\n    | where match(device_sn, \"^[A-Za-z0-9][A-Za-z0-9._-]*$\") AND display_name!=\"\" AND county!=\"\"\n]\n| stats last(display_name) as display_name last(county) as county max(latitude) as latitude max(longitude) as longitude max(elevation_ft) as elevation_ft by device_sn\n| outputlookup ranch_places\n| stats count as places",
         "queryParameters": {
           "earliest": "-5m",
           "latest": "now"

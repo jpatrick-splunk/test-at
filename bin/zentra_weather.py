@@ -9,6 +9,7 @@ import sys
 import traceback
 from datetime import datetime, timedelta, timezone
 from typing import List, Optional, TextIO
+from zoneinfo import ZoneInfo
 import time
 
 from zentra import SCHEME_NAME
@@ -26,6 +27,17 @@ from zentra.config import (
 )
 from zentra.normalize import describe_measurement_map, flatten_readings, reading_skip_summary
 from zentra.stream import end_stream, start_stream, write_event
+
+# ZENTRA treats start_date and end_date as the logger's local clock, not UTC.
+LOGGER_LOCAL = ZoneInfo("America/Chicago")
+
+
+def _api_local_clock(moment: datetime) -> str:
+    """Format an instant as the naive local time ZENTRA expects."""
+    if moment.tzinfo is None:
+        moment = moment.replace(tzinfo=timezone.utc)
+    return moment.astimezone(LOGGER_LOCAL).strftime("%Y-%m-%d %H:%M:%S")
+
 
 SCHEME = """<scheme>
     <title>ZENTRA Cloud Weather</title>
@@ -261,8 +273,8 @@ def _poll_device(stanza_name: str, device_sn: str, settings: dict, checkpoint_di
 
     def emit_window(start_dt, end_dt, min_mrid, min_ts, label):
         nonlocal emitted, max_mrid, max_ts, oldest_ts
-        start_date = start_dt.strftime("%Y-%m-%d %H:%M:%S")
-        end_date = end_dt.strftime("%Y-%m-%d %H:%M:%S")
+        start_date = _api_local_clock(start_dt)
+        end_date = _api_local_clock(end_dt)
         log(
             "polling %s window=%s start_date=%s end_date=%s format=%s skip_mrid<=%s skip_ts<=%s"
             % (device_sn, label, start_date, end_date, output_format, min_mrid, min_ts)
@@ -425,12 +437,14 @@ def _poll_device(stanza_name: str, device_sn: str, settings: dict, checkpoint_di
         log(traceback.format_exc())
 
     if last_ts is not None and oldest_ts is not None and int(oldest_ts) > int(last_ts) + 1800:
+        # The request started at the checkpoint, so this stretch is empty in
+        # ZENTRA. Keep the newest sample; holding the checkpoint here re-indexes
+        # the same readings on every poll.
         log(
-            "device %s hole: oldest emitted ts=%s is after checkpoint ts=%s; "
-            "not advancing last_timestamp_utc"
+            "device %s empty gap: oldest sample ts=%s is after checkpoint ts=%s; "
+            "advancing last_timestamp_utc to the newest sample"
             % (device_sn, oldest_ts, last_ts)
         )
-        max_ts = last_ts
 
     if emitted or max_mrid != last_mrid or max_ts != last_ts or extra_ckpt:
         save_checkpoint(

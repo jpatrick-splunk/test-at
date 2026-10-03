@@ -6,4 +6,6 @@ __pycache__/
 venv/
 .DS_Store
 local/inputs.conf
+local/macros.conf
+metadata/local.meta
 *.local.conf
