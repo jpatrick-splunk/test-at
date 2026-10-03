@@ -1,10 +1,15 @@
 <nav search_view="search" color="#1B5E20">
-  <view name="weather_overview" default="true" />
-  <view name="rainfall_totals" />
-  <view name="logger_detail" />
-  <view name="reading_validation" />
-  <view name="data_quality" />
-  <view name="collection_status" />
+  <view name="ranch_overview" default="true" />
+  <view name="place_detail" />
+  <view name="places" />
+  <collection label="Collection">
+    <view name="weather_overview" />
+    <view name="rainfall_totals" />
+    <view name="logger_detail" />
+    <view name="reading_validation" />
+    <view name="data_quality" />
+    <view name="collection_status" />
+  </collection>
   <view name="search" />
   <view name="dashboards" />
 </nav>

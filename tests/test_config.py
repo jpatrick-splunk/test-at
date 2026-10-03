@@ -63,9 +63,12 @@ class DeviceListTests(unittest.TestCase):
             ["z6-30302", "z6-11111"],
         )
 
-    def test_rejects_more_than_three(self):
+    def test_accepts_more_than_three(self):
+        self.assertEqual(len(parse_device_sns("a-1, a-2, a-3, a-4")), 4)
+
+    def test_rejects_more_than_max(self):
         with self.assertRaises(ConfigError):
-            parse_device_sns("a-1, a-2, a-3, a-4")
+            parse_device_sns(",".join("a-%d" % n for n in range(26)))
 
     def test_rejects_bad_serial(self):
         with self.assertRaises(ConfigError):

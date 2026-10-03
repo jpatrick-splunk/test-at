@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <dashboard version="1.1">
   <label>Rainfall Totals</label>
-  <description>Precipitation is rainfall during each 15-minute interval, in the logger's units. Daily, weekly, monthly, and annual charts sum those samples by logger_day (the date in datetime). The time picker applies to the 15-minute chart and the interval table. The total charts use their own calendar windows.</description>
+  <description>Precipitation is rainfall during each 15-minute interval, in the logger's units. Daily, weekly, monthly, and annual charts sum those samples by logger_day (the date in datetime). The time picker applies to the 15-minute chart and the intervals-with-rain chart. The total charts use their own calendar windows.</description>
   <search id="precip_base">
     <query>`zentra_interval_precip` device_sn="$device_sn$"</query>
     <earliest>$time.earliest$</earliest>
@@ -114,19 +114,23 @@
         <option name="charting.legend.placement">none</option>
       </chart>
     </panel>
+  </row>
+  <row>
     <panel>
-      <table>
+      <chart>
         <title>Intervals with rain (value &gt; 0)</title>
         <search>
           <query>`zentra_precip_rain` device_sn="$device_sn$"
-| table datetime, logger_day, value, units
-| sort - datetime</query>
+| timechart span=15m sum(value) as rainfall
+| eval rainfall=if(rainfall&gt;0, round(rainfall, 4), null())</query>
           <earliest>$time.earliest$</earliest>
           <latest>$time.latest$</latest>
         </search>
-        <option name="drilldown">none</option>
-        <option name="count">20</option>
-      </table>
+        <option name="charting.chart">column</option>
+        <option name="charting.axisTitleY.text">inches</option>
+        <option name="charting.chart.nullValueMode">gaps</option>
+        <option name="charting.legend.placement">none</option>
+      </chart>
     </panel>
   </row>
   <row>

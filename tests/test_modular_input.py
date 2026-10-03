@@ -38,6 +38,19 @@ RUN_XML_TEMPLATE = """<?xml version="1.0" encoding="utf-8"?>
 """
 
 
+class PollLockTests(unittest.TestCase):
+    def test_second_poll_is_skipped_while_the_first_holds_the_lock(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            first = mi._acquire_poll_lock(tmp)
+            self.assertIsNotNone(first)
+            second = mi._acquire_poll_lock(tmp)
+            self.assertIsNone(second)
+            mi._release_poll_lock(first)
+            third = mi._acquire_poll_lock(tmp)
+            self.assertIsNotNone(third)
+            mi._release_poll_lock(third)
+
+
 class SchemeTests(unittest.TestCase):
     def test_scheme_xml(self):
         buf = io.StringIO()
@@ -55,11 +68,12 @@ class SchemeTests(unittest.TestCase):
 
 
 class ValidationTests(unittest.TestCase):
-    def test_rejects_four_devices(self):
+    def test_rejects_more_than_max_devices(self):
+        devices = ",".join("a-%d" % n for n in range(26))
         xml = """<items><item name="zentra_weather://x">
-            <param name="device_sns">a-1,a-2,a-3,a-4</param>
+            <param name="device_sns">{devices}</param>
             <param name="api_token">t</param>
-        </item></items>"""
+        </item></items>""".format(devices=devices)
         with self.assertRaises(ConfigError):
             mi.validate_arguments(xml)
 
@@ -412,6 +426,9 @@ class AppPackagingTests(unittest.TestCase):
             "weather_overview.xml",
             "logger_detail.xml",
             "data_quality.xml",
+            "ranch_overview.xml",
+            "place_detail.xml",
+            "places.xml",
         ):
             ET.parse(app / "default" / "data" / "ui" / "views" / view)
             text = (app / "default" / "data" / "ui" / "views" / view).read_text()
@@ -421,6 +438,8 @@ class AppPackagingTests(unittest.TestCase):
         ET.parse(app / "default" / "data" / "ui" / "nav" / "default.xml")
         self.assertIn('view name="weather_overview"', nav)
         self.assertIn('view name="rainfall_totals"', nav)
+        self.assertIn('view name="ranch_overview" default="true"', nav)
+        self.assertIn('view name="places"', nav)
         macros = (app / "default" / "macros.conf").read_text()
         self.assertIn("[zentra_canonical(1)]", macros)
         self.assertIn("[zentra_precip_rain]", macros)

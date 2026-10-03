@@ -3,6 +3,8 @@
 
 from __future__ import annotations
 
+import fcntl
+import os
 import sys
 import traceback
 from datetime import datetime, timedelta, timezone
@@ -27,7 +29,7 @@ from zentra.stream import end_stream, start_stream, write_event
 
 SCHEME = """<scheme>
     <title>ZENTRA Cloud Weather</title>
-    <description>Poll ZENTRA Cloud v4 for up to three field loggers and index 15-minute readings so daily and weekly rainfall can be totaled in Splunk.</description>
+    <description>Poll ZENTRA Cloud v4 for field loggers and index 15-minute readings for ranch weather.</description>
     <use_external_validation>true</use_external_validation>
     <use_single_instance>true</use_single_instance>
     <streaming_mode>xml</streaming_mode>
@@ -35,7 +37,7 @@ SCHEME = """<scheme>
         <args>
             <arg name="device_sns">
                 <title>Field logger serial numbers</title>
-                <description>Up to three comma-separated serial numbers. Default is z6-30302.</description>
+                <description>Comma-separated serial numbers, up to 25. Default is z6-30302.</description>
                 <required_on_create>false</required_on_create>
                 <required_on_edit>false</required_on_edit>
             </arg>
@@ -103,11 +105,45 @@ def validate_arguments(xml_text: Optional[str] = None) -> None:
         stanza_settings(stanza)
 
 
+def _acquire_poll_lock(checkpoint_dir: str):
+    """Hold an exclusive lock for this poll.
+
+    Splunk can start a second copy while a slow poll is still talking to
+    ZENTRA. Both copies would index the same readings. The lock makes the
+    second copy exit until the first one finishes.
+    """
+    directory = checkpoint_dir or "."
+    os.makedirs(directory, exist_ok=True)
+    handle = open(os.path.join(directory, ".poll.lock"), "a+")
+    try:
+        fcntl.flock(handle.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+    except OSError:
+        handle.close()
+        return None
+    return handle
+
+
+def _release_poll_lock(handle) -> None:
+    if handle is None:
+        return
+    try:
+        fcntl.flock(handle.fileno(), fcntl.LOCK_UN)
+    finally:
+        handle.close()
+
+
 def run(xml_text: Optional[str] = None) -> int:
     payload = xml_text if xml_text is not None else sys.stdin.read()
     cfg = parse_input_xml(payload)
     if not cfg.stanzas:
         log("no input stanzas configured")
+        return 0
+
+    lock = _acquire_poll_lock(cfg.checkpoint_dir)
+    if lock is None:
+        log("another ZENTRA poll is still running; skipping this interval")
+        start_stream()
+        end_stream()
         return 0
 
     start_stream()
@@ -117,6 +153,7 @@ def run(xml_text: Optional[str] = None) -> int:
             event_count += _run_stanza(stanza, cfg.checkpoint_dir)
     finally:
         end_stream()
+        _release_poll_lock(lock)
     log("indexed %d reading events" % event_count)
     return 0
 

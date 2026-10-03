@@ -2,7 +2,7 @@
 * Poll ZENTRA Cloud v4 for field logger weather readings.
 
 device_sns = <value>
-* Comma-separated logger serial numbers. At most three.
+* Comma-separated logger serial numbers. At most 25.
 * Default: z6-30302
 
 api_token = <value>
