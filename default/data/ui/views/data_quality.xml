@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <dashboard version="1.1">
   <label>Data Quality</label>
-  <description>Polling freshness, sensor errors, and coverage for ZENTRA Cloud weather events.</description>
+  <description>Reading volume, logger freshness, and sensor errors for long-format zentra:reading events.</description>
   <fieldset submitButton="false" autoRun="true">
     <input type="time" token="time" searchWhenChanged="true">
       <label>Time range</label>
@@ -14,11 +14,9 @@
   <row>
     <panel>
       <single>
-        <title>Indexed observations</title>
+        <title>Indexed readings</title>
         <search>
-          <query>| datamodel Weather Weather search
-| rename "Weather.*" as *
-| stats count</query>
+          <query>`zentra_weather_search` | stats count</query>
           <earliest>$time.earliest$</earliest>
           <latest>$time.latest$</latest>
         </search>
@@ -28,9 +26,7 @@
       <single>
         <title>Loggers seen</title>
         <search>
-          <query>| datamodel Weather Weather search
-| rename "Weather.*" as *
-| stats dc(device_sn) as value</query>
+          <query>`zentra_weather_search` | stats dc(device_sn) as value</query>
           <earliest>$time.earliest$</earliest>
           <latest>$time.latest$</latest>
         </search>
@@ -38,10 +34,19 @@
     </panel>
     <panel>
       <single>
-        <title>Observations with errors</title>
+        <title>Measurements</title>
         <search>
-          <query>| datamodel Weather Weather search
-| rename "Weather.*" as *
+          <query>`zentra_weather_search` | stats dc(measurement) as value</query>
+          <earliest>$time.earliest$</earliest>
+          <latest>$time.latest$</latest>
+        </search>
+      </single>
+    </panel>
+    <panel>
+      <single>
+        <title>Readings with errors</title>
+        <search>
+          <query>`zentra_weather_search`
 | where error_flag=true OR error_flag="true" OR error_flag=1
 | stats count as value</query>
           <earliest>$time.earliest$</earliest>
@@ -59,12 +64,10 @@
       <table>
         <title>Logger freshness</title>
         <search>
-          <query>| datamodel Weather Weather search
-| rename "Weather.*" as *
-| stats latest(_time) as last_seen max(mrid) as last_mrid count as observations sum(eval(if(error_flag=true OR error_flag="true" OR error_flag=1,1,0))) as error_events by device_sn device_name
+          <query>`zentra_weather_search`
+| stats latest(datetime) as last_datetime latest(_time) as last_seen max(mrid) as last_mrid count as readings dc(measurement) as measurements sum(eval(if(error_flag=true OR error_flag="true" OR error_flag=1,1,0))) as error_events by device_sn
 | eval age_seconds = now() - last_seen
 | eval stale = if(age_seconds &gt; 1800, "stale", "ok")
-| convert ctime(last_seen)
 | sort stale, device_sn</query>
           <earliest>$time.earliest$</earliest>
           <latest>$time.latest$</latest>
@@ -75,17 +78,14 @@
     </panel>
     <panel>
       <chart>
-        <title>Error flags over time</title>
+        <title>Reading volume by measurement</title>
         <search>
-          <query>| datamodel Weather Weather search
-| rename "Weather.*" as *
-| eval is_error = if(error_flag=true OR error_flag="true" OR error_flag=1, 1, 0)
-| timechart span=15m sum(is_error) as error_events count as observations by device_sn</query>
+          <query>`zentra_weather_search`
+| timechart span=1h count by measurement</query>
           <earliest>$time.earliest$</earliest>
           <latest>$time.latest$</latest>
         </search>
-        <option name="charting.chart">column</option>
-        <option name="charting.chart.stackMode">stacked</option>
+        <option name="charting.chart">line</option>
       </chart>
     </panel>
   </row>
@@ -94,11 +94,10 @@
       <table>
         <title>Sensor error details</title>
         <search>
-          <query>| datamodel Weather Weather search
-| rename "Weather.*" as *
+          <query>`zentra_weather_search`
 | where error_flag=true OR error_flag="true" OR error_flag=1 OR isnotnull(metadata_errors)
-| table _time, device_sn, sensor_name, error_flag, error_description, metadata_errors, air_temperature, wind_speed
-| sort - _time</query>
+| table datetime, device_sn, measurement, value, units, sensor_name, error_flag, error_description, metadata_errors
+| sort - datetime</query>
           <earliest>$time.earliest$</earliest>
           <latest>$time.latest$</latest>
         </search>
@@ -107,17 +106,18 @@
       </table>
     </panel>
     <panel>
-      <chart>
-        <title>Observation volume</title>
+      <table>
+        <title>Coverage by measurement</title>
         <search>
-          <query>| datamodel Weather Weather search
-| rename "Weather.*" as *
-| timechart span=15m count by device_sn</query>
+          <query>`zentra_weather_search`
+| stats count as samples latest(datetime) as last_datetime latest(units) as units latest(aggregation) as rollup by measurement, measurement_canonical
+| sort measurement</query>
           <earliest>$time.earliest$</earliest>
           <latest>$time.latest$</latest>
         </search>
-        <option name="charting.chart">line</option>
-      </chart>
+        <option name="count">50</option>
+        <option name="drilldown">none</option>
+      </table>
     </panel>
   </row>
 </dashboard>

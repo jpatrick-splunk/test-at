@@ -26,11 +26,11 @@ class InputStanza:
 
     @property
     def index(self) -> str:
-        return self.params.get("index", "weather")
+        return self.params.get("index", "zentra_validate")
 
     @property
     def sourcetype(self) -> str:
-        return self.params.get("sourcetype", "zentra:weather")
+        return self.params.get("sourcetype", "zentra:reading")
 
     @property
     def host(self) -> str:
@@ -178,6 +178,40 @@ def _stanza_from_element(element: ET.Element, name: str) -> InputStanza:
     return InputStanza(name=name, params=params)
 
 
+def splunk_index_dir(index_name: str, environ: Optional[dict] = None) -> Optional[str]:
+    """Return the standalone db path for an index, or None if unknown."""
+    env = environ if environ is not None else os.environ
+    name = (index_name or "").strip()
+    if not name or name.startswith("_"):
+        return None
+    if not re.match(r"^[A-Za-z0-9][A-Za-z0-9_-]*$", name):
+        return None
+    splunk_db = (env.get("SPLUNK_DB") or "").strip()
+    if not splunk_db:
+        home = (env.get("SPLUNK_HOME") or "").strip()
+        if not home:
+            return None
+        splunk_db = os.path.join(home, "var", "lib", "splunk")
+    return os.path.join(splunk_db, name)
+
+
+def index_storage_exists(index_name: str, environ: Optional[dict] = None) -> Optional[bool]:
+    """True/False when Splunk db paths are known; None if we cannot tell.
+
+    Used only to log a clear warning. Splunk still decides whether to accept events.
+    """
+    path = splunk_index_dir(index_name, environ=environ)
+    if not path:
+        return None
+    return os.path.isdir(path) or os.path.isdir(os.path.join(path, "db"))
+
+
+def parse_bool(value: Optional[str], default: bool) -> bool:
+    if value is None or str(value).strip() == "":
+        return default
+    return str(value).strip().lower() in ("1", "true", "yes", "y", "on")
+
+
 def stanza_devices(stanza: InputStanza) -> List[str]:
     return parse_device_sns(stanza.params.get("device_sns"))
 
@@ -191,11 +225,13 @@ def stanza_settings(stanza: InputStanza) -> dict:
         ),
         "device_sns": stanza_devices(stanza),
         "lookback_hours": parse_positive_int(
-            stanza.params.get("lookback_hours"), 168, "lookback_hours", maximum=24 * 30
+            stanza.params.get("lookback_hours"), 720, "lookback_hours", maximum=24 * 90
         ),
         "per_page": parse_positive_int(
             stanza.params.get("per_page"), 2000, "per_page", maximum=2000
         ),
+        "ignore_checkpoint": parse_bool(stanza.params.get("ignore_checkpoint"), False),
+        "output_format": (stanza.params.get("output_format") or "df").strip().lower() or "df",
         "index": stanza.index,
         "sourcetype": stanza.sourcetype,
         "host": stanza.host,

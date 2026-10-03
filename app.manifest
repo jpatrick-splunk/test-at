@@ -5,7 +5,7 @@
     "id": {
       "group": null,
       "name": "zentra_weather",
-      "version": "1.0.0"
+      "version": "1.1.0"
     },
     "author": [
       {
@@ -15,7 +15,7 @@
       }
     ],
     "releaseDate": null,
-    "description": "Polls ZENTRA Cloud v4 for up to three field loggers, indexes normalized weather events, and provides a Weather data model with Simple XML dashboards.",
+    "description": "Polls ZENTRA Cloud v4 15-minute field logger readings and totals daily and weekly rainfall in Splunk.",
     "classification": {
       "intendedAudience": "IT and environmental operations",
       "categories": ["IoT", "IT Operations"],

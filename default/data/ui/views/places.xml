@@ -1,0 +1,161 @@
+<dashboard version="2" theme="light">
+    <label>Places</label>
+    <description>Names and counties used on every ranch dashboard.</description>
+    <definition><![CDATA[
+{
+  "title": "Places",
+  "description": "Names and counties used on every ranch dashboard.",
+  "visualizations": {
+    "viz_help": {
+      "type": "splunk.markdown",
+      "options": {
+        "markdown": "Clark Place, Robert is set to Floyd County because that logger is about half a mile from Clark Place, John. Change the county here if that is wrong. To add a logger, put its serial on the data input, then save a name here. Enter the serial, the name to show on dashboards, and the county, then click Save place. Click Submit to save. An empty form leaves the current list unchanged."
+      }
+    },
+    "viz_table": {
+      "type": "splunk.table",
+      "title": "Current places",
+      "dataSources": {
+        "primary": "ds_table"
+      },
+      "options": {
+        "count": 20
+      }
+    },
+    "viz_saved": {
+      "type": "splunk.singlevalue",
+      "title": "Places saved",
+      "dataSources": {
+        "primary": "ds_save"
+      },
+      "options": {}
+    }
+  },
+  "dataSources": {
+    "ds_table": {
+      "type": "ds.search",
+      "name": "Place table",
+      "options": {
+        "query": "| inputlookup ranch_places | table device_sn display_name county latitude longitude elevation_ft | rename device_sn as Serial display_name as Place county as County latitude as Latitude longitude as Longitude elevation_ft as \"Elevation ft\" | sort Place",
+        "queryParameters": {
+          "earliest": "-5m",
+          "latest": "now"
+        }
+      }
+    },
+    "ds_save": {
+      "type": "ds.search",
+      "name": "Save place",
+      "options": {
+        "query": "| inputlookup ranch_places\n| append [\n    | makeresults\n    | eval device_sn=$device_sn|s$, display_name=$display_name|s$, county=$county|s$\n    | where match(device_sn, \"^[A-Za-z0-9][A-Za-z0-9._-]*$\") AND display_name!=\"\" AND county!=\"\"\n]\n| stats last(display_name) as display_name last(county) as county max(latitude) as latitude max(longitude) as longitude max(elevation_ft) as elevation_ft by device_sn\n| outputlookup ranch_places\n| stats count as places",
+        "queryParameters": {
+          "earliest": "-5m",
+          "latest": "now"
+        }
+      }
+    }
+  },
+  "defaults": {
+    "dataSources": {
+      "ds.search": {
+        "options": {
+          "queryParameters": {}
+        }
+      }
+    }
+  },
+  "inputs": {
+    "input_sn": {
+      "type": "input.text",
+      "title": "Logger serial",
+      "options": {
+        "token": "device_sn",
+        "defaultValue": ""
+      }
+    },
+    "input_name": {
+      "type": "input.text",
+      "title": "Name on dashboards",
+      "options": {
+        "token": "display_name",
+        "defaultValue": ""
+      }
+    },
+    "input_county": {
+      "type": "input.text",
+      "title": "County",
+      "options": {
+        "token": "county",
+        "defaultValue": ""
+      }
+    }
+  },
+  "layout": {
+    "tabs": {
+      "items": [
+        {
+          "layoutId": "layout_1",
+          "label": "Ranch"
+        }
+      ]
+    },
+    "layoutDefinitions": {
+      "layout_1": {
+        "type": "grid",
+        "options": {
+          "width": 1440,
+          "height": 480,
+          "display": "auto-scale",
+          "submitButton": true,
+          "submitOnDashboardLoad": true
+        },
+        "structure": [
+          {
+            "item": "viz_help",
+            "type": "block",
+            "position": {
+              "x": 0,
+              "y": 0,
+              "w": 1440,
+              "h": 110
+            }
+          },
+          {
+            "item": "viz_table",
+            "type": "block",
+            "position": {
+              "x": 0,
+              "y": 130,
+              "w": 960,
+              "h": 320
+            }
+          },
+          {
+            "item": "viz_saved",
+            "type": "block",
+            "position": {
+              "x": 960,
+              "y": 130,
+              "w": 480,
+              "h": 160
+            }
+          }
+        ]
+      }
+    },
+    "globalInputs": [
+      "input_sn",
+      "input_name",
+      "input_county"
+    ]
+  }
+}
+    ]]></definition>
+    <meta type="hiddenElements"><![CDATA[
+{
+    "hideEdit": false,
+    "hideOpenInSearch": false,
+    "hideExport": false
+}
+    ]]></meta>
+</dashboard>

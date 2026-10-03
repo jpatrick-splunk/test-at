@@ -11,15 +11,23 @@ from typing import Any, Dict, Optional
 SAFE_NAME_RE = re.compile(r"[^A-Za-z0-9._-]+")
 
 
-def checkpoint_path(checkpoint_dir: str, device_sn: str) -> str:
+def checkpoint_path(
+    checkpoint_dir: str, device_sn: str, namespace: Optional[str] = None
+) -> str:
     safe = SAFE_NAME_RE.sub("_", device_sn).strip("._") or "device"
-    return os.path.join(checkpoint_dir, "%s.json" % safe)
+    filename = "%s.json" % safe
+    if namespace:
+        ns = SAFE_NAME_RE.sub("_", namespace).strip("._") or "input"
+        return os.path.join(checkpoint_dir, ns, filename)
+    return os.path.join(checkpoint_dir, filename)
 
 
-def load_checkpoint(checkpoint_dir: str, device_sn: str) -> Dict[str, Any]:
+def load_checkpoint(
+    checkpoint_dir: str, device_sn: str, namespace: Optional[str] = None
+) -> Dict[str, Any]:
     if not checkpoint_dir:
         return {}
-    path = checkpoint_path(checkpoint_dir, device_sn)
+    path = checkpoint_path(checkpoint_dir, device_sn, namespace=namespace)
     if not os.path.isfile(path):
         return {}
     try:
@@ -35,11 +43,14 @@ def save_checkpoint(
     device_sn: str,
     last_mrid: Optional[int] = None,
     last_timestamp_utc: Optional[int] = None,
+    namespace: Optional[str] = None,
+    extra: Optional[Dict[str, Any]] = None,
 ) -> Dict[str, Any]:
     if not checkpoint_dir:
         return {}
-    os.makedirs(checkpoint_dir, exist_ok=True)
-    current = load_checkpoint(checkpoint_dir, device_sn)
+    path = checkpoint_path(checkpoint_dir, device_sn, namespace=namespace)
+    os.makedirs(os.path.dirname(path) or checkpoint_dir, exist_ok=True)
+    current = load_checkpoint(checkpoint_dir, device_sn, namespace=namespace)
     if last_mrid is not None:
         previous = current.get("last_mrid")
         if previous is None or int(last_mrid) > int(previous):
@@ -48,9 +59,14 @@ def save_checkpoint(
         previous_ts = current.get("last_timestamp_utc")
         if previous_ts is None or int(last_timestamp_utc) > int(previous_ts):
             current["last_timestamp_utc"] = int(last_timestamp_utc)
+    if extra:
+        for key, value in extra.items():
+            if key in ("last_mrid", "last_timestamp_utc", "device_sn"):
+                continue
+            current[key] = value
     current["device_sn"] = device_sn
-    path = checkpoint_path(checkpoint_dir, device_sn)
-    fd, tmp_path = tempfile.mkstemp(prefix=".ckpt-", dir=checkpoint_dir)
+    tmp_dir = os.path.dirname(path) or checkpoint_dir
+    fd, tmp_path = tempfile.mkstemp(prefix=".ckpt-", dir=tmp_dir)
     try:
         with os.fdopen(fd, "w", encoding="utf-8") as handle:
             json.dump(current, handle, indent=2, sort_keys=True)

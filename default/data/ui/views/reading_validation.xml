@@ -1,0 +1,88 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<dashboard version="1.1">
+  <label>Reading Validation</label>
+  <description>Raw 15-minute ZENTRA readings. datetime is the logger measurement time. Compare Precipitation rows with value &gt; 0 to https://zentracloud.com/#/dashboard_detail/z6-30302. Use Rainfall Totals to sum those interval samples by logger_day.</description>
+  <fieldset submitButton="false" autoRun="true">
+    <input type="time" token="time" searchWhenChanged="true">
+      <label>Time range</label>
+      <default>
+        <earliest>-14d@d</earliest>
+        <latest>now</latest>
+      </default>
+    </input>
+    <input type="dropdown" token="device_sn" searchWhenChanged="true">
+      <label>Logger</label>
+      <choice value="*">All loggers</choice>
+      <default>z6-30302</default>
+      <initialValue>z6-30302</initialValue>
+      <fieldForLabel>device_sn</fieldForLabel>
+      <fieldForValue>device_sn</fieldForValue>
+      <search>
+        <query>`zentra_weather_search` | stats count by device_sn | sort device_sn</query>
+        <earliest>$time.earliest$</earliest>
+        <latest>$time.latest$</latest>
+      </search>
+    </input>
+    <input type="dropdown" token="measurement" searchWhenChanged="true">
+      <label>Measurement (ZENTRA name)</label>
+      <choice value="*">All measurements</choice>
+      <default>Precipitation</default>
+      <initialValue>Precipitation</initialValue>
+      <fieldForLabel>measurement</fieldForLabel>
+      <fieldForValue>measurement</fieldForValue>
+      <search>
+        <query>`zentra_weather_search` device_sn="$device_sn$" | stats count by measurement | sort measurement</query>
+        <earliest>$time.earliest$</earliest>
+        <latest>$time.latest$</latest>
+      </search>
+    </input>
+  </fieldset>
+  <row>
+    <panel>
+      <table>
+        <title>Measurements present (must match chart titles on the ZENTRA dashboard)</title>
+        <search>
+          <query>`zentra_weather_search` device_sn="$device_sn$"
+| stats latest(units) as units latest(aggregation) as rollup_to_day_or_week latest(sensor_name) as sensor_name count as samples by measurement, measurement_canonical
+| sort measurement</query>
+          <earliest>$time.earliest$</earliest>
+          <latest>$time.latest$</latest>
+        </search>
+        <option name="drilldown">none</option>
+        <option name="count">50</option>
+      </table>
+    </panel>
+  </row>
+  <row>
+    <panel>
+      <table>
+        <title>Precipitation intervals with rain (value &gt; 0) — match these datetimes to ZENTRA tooltips</title>
+        <search>
+          <query>`zentra_precip_rain` device_sn="$device_sn$"
+| table datetime, logger_day, measurement, value, units, tz_offset
+| sort - datetime</query>
+          <earliest>$time.earliest$</earliest>
+          <latest>$time.latest$</latest>
+        </search>
+        <option name="drilldown">none</option>
+        <option name="count">50</option>
+      </table>
+    </panel>
+  </row>
+  <row>
+    <panel>
+      <table>
+        <title>All 15-minute samples for the selected measurement</title>
+        <search>
+          <query>`zentra_weather_search` device_sn="$device_sn$" measurement="$measurement$"
+| table datetime, logger_day, _time, device_sn, measurement, value, units, tz_offset, sensor_name, mrid, error_flag
+| sort - datetime</query>
+          <earliest>$time.earliest$</earliest>
+          <latest>$time.latest$</latest>
+        </search>
+        <option name="drilldown">none</option>
+        <option name="count">96</option>
+      </table>
+    </panel>
+  </row>
+</dashboard>
