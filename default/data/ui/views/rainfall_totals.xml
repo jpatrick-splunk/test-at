@@ -137,11 +137,12 @@
           <query>`zentra_interval_precip` device_sn="$device_sn$"
 | eval _time=strptime(logger_day." 12:00:00", "%Y-%m-%d %H:%M:%S")
 | timechart span=1d sum(value) as daily_rainfall
-| fillnull value=0 daily_rainfall</query>
+| eval daily_rainfall=if(daily_rainfall&gt;0, round(daily_rainfall, 2), null())</query>
           <earliest>-30d@d</earliest>
           <latest>now</latest>
         </search>
         <option name="charting.chart">column</option>
+        <option name="charting.chart.showDataLabels">all</option>
         <option name="charting.axisTitleY.text">inches</option>
         <option name="charting.legend.placement">none</option>
       </chart>
@@ -153,11 +154,13 @@
           <query>`zentra_interval_precip` device_sn="$device_sn$"
 | eval _time=strptime(logger_day." 12:00:00", "%Y-%m-%d %H:%M:%S")
 | timechart span=1w sum(value) as weekly_rainfall
-| where isnotnull(weekly_rainfall)</query>
+| where isnotnull(weekly_rainfall)
+| eval weekly_rainfall=round(weekly_rainfall, 2)</query>
           <earliest>-16w@w</earliest>
           <latest>now</latest>
         </search>
         <option name="charting.chart">column</option>
+        <option name="charting.chart.showDataLabels">all</option>
         <option name="charting.axisTitleY.text">inches</option>
         <option name="charting.legend.placement">none</option>
       </chart>
@@ -171,11 +174,13 @@
           <query>`zentra_interval_precip` device_sn="$device_sn$"
 | eval _time=strptime(logger_day." 12:00:00", "%Y-%m-%d %H:%M:%S")
 | timechart span=1mon sum(value) as monthly_rainfall
-| where isnotnull(monthly_rainfall)</query>
+| where isnotnull(monthly_rainfall)
+| eval monthly_rainfall=round(monthly_rainfall, 2)</query>
           <earliest>@y</earliest>
           <latest>now</latest>
         </search>
         <option name="charting.chart">column</option>
+        <option name="charting.chart.showDataLabels">all</option>
         <option name="charting.axisTitleY.text">inches</option>
         <option name="charting.legend.placement">none</option>
       </chart>
@@ -187,11 +192,13 @@
           <query>`zentra_interval_precip` device_sn="$device_sn$"
 | eval _time=strptime(logger_day." 12:00:00", "%Y-%m-%d %H:%M:%S")
 | timechart span=1y sum(value) as annual_rainfall
-| where isnotnull(annual_rainfall)</query>
+| where isnotnull(annual_rainfall)
+| eval annual_rainfall=round(annual_rainfall, 2)</query>
           <earliest>-5y@y</earliest>
           <latest>now</latest>
         </search>
         <option name="charting.chart">column</option>
+        <option name="charting.chart.showDataLabels">all</option>
         <option name="charting.axisTitleY.text">inches</option>
         <option name="charting.legend.placement">none</option>
       </chart>
