@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <dashboard version="1.1">
   <label>Rainfall Totals</label>
-  <description>ZENTRA Cloud charts Precipitation as rainfall during each 15-minute interval. This view keeps those samples and sums value by logger_day (the date in datetime) so customers can see daily and weekly rain. Zeros are dry intervals and do not change the total.</description>
+  <description>Precipitation is rainfall during each 15-minute interval, in the logger's units. Daily, weekly, monthly, and annual charts sum those samples by logger_day (the date in datetime). The time picker applies to the 15-minute chart and the interval table. The total charts use their own calendar windows.</description>
   <search id="precip_base">
     <query>`zentra_interval_precip` device_sn="$device_sn$"</query>
     <earliest>$time.earliest$</earliest>
@@ -10,8 +10,8 @@
   <fieldset submitButton="false" autoRun="true">
     <input type="time" token="time" searchWhenChanged="true">
       <label>Time range</label>
-      <default>
-        <earliest>-14d@d</earliest>
+        <default>
+        <earliest>-30d@d</earliest>
         <latest>now</latest>
       </default>
     </input>
@@ -61,16 +61,45 @@
         <title>Rain this week (logger calendar)</title>
         <search>
           <query>`zentra_interval_precip` device_sn="$device_sn$"
-| eval logger_week=strftime(strptime(logger_day, "%Y-%m-%d"), "%Y-%W")
-| eval this_week=strftime(now(), "%Y-%W")
-| where logger_week=this_week
+| eval day_epoch=strptime(logger_day." 12:00:00", "%Y-%m-%d %H:%M:%S")
+| where relative_time(day_epoch, "@w")=relative_time(now(), "@w")
 | stats sum(value) as rainfall latest(units) as units
 | eval value = if(isnotnull(rainfall), round(rainfall, 3)." ".coalesce(units,""), "n/a")
 | fields value</query>
           <earliest>-14d@d</earliest>
           <latest>now</latest>
         </search>
-        <option name="underLabel">sum of this week's logger_day samples</option>
+        <option name="underLabel">Sunday-start week, same buckets as the weekly chart</option>
+      </single>
+    </panel>
+    <panel>
+      <single>
+        <title>Rain this month (logger calendar)</title>
+        <search>
+          <query>`zentra_interval_precip` device_sn="$device_sn$"
+| where logger_day&gt;=strftime(relative_time(now(), "@mon"), "%Y-%m-%d")
+| stats sum(value) as rainfall latest(units) as units
+| eval value = if(isnotnull(rainfall), round(rainfall, 3)." ".coalesce(units,""), "n/a")
+| fields value</query>
+          <earliest>-40d@d</earliest>
+          <latest>now</latest>
+        </search>
+        <option name="underLabel">sum of Precipitation for this calendar month</option>
+      </single>
+    </panel>
+    <panel>
+      <single>
+        <title>Rain this year (logger calendar)</title>
+        <search>
+          <query>`zentra_interval_precip` device_sn="$device_sn$"
+| where logger_day&gt;=strftime(relative_time(now(), "@y"), "%Y-%m-%d")
+| stats sum(value) as rainfall latest(units) as units
+| eval value = if(isnotnull(rainfall), round(rainfall, 3)." ".coalesce(units,""), "n/a")
+| fields value</query>
+          <earliest>@y</earliest>
+          <latest>now</latest>
+        </search>
+        <option name="underLabel">year to date from logger_day</option>
       </single>
     </panel>
   </row>
@@ -103,23 +132,67 @@
   <row>
     <panel>
       <chart>
-        <title>Daily rainfall (sum of that day's 15-minute samples)</title>
-        <search base="precip_base">
-          <query>| eval _time=strptime(logger_day, "%Y-%m-%d")
-| timechart span=1d sum(value) as daily_rainfall</query>
+        <title>Daily rainfall (last 30 logger days)</title>
+        <search>
+          <query>`zentra_interval_precip` device_sn="$device_sn$"
+| eval _time=strptime(logger_day." 12:00:00", "%Y-%m-%d %H:%M:%S")
+| timechart span=1d sum(value) as daily_rainfall
+| fillnull value=0 daily_rainfall</query>
+          <earliest>-30d@d</earliest>
+          <latest>now</latest>
         </search>
         <option name="charting.chart">column</option>
+        <option name="charting.axisTitleY.text">inches</option>
         <option name="charting.legend.placement">none</option>
       </chart>
     </panel>
     <panel>
       <chart>
-        <title>Weekly rainfall (sum of that week's 15-minute samples)</title>
-        <search base="precip_base">
-          <query>| eval _time=strptime(logger_day, "%Y-%m-%d")
-| timechart span=1w sum(value) as weekly_rainfall</query>
+        <title>Weekly rainfall (last 16 weeks)</title>
+        <search>
+          <query>`zentra_interval_precip` device_sn="$device_sn$"
+| eval _time=strptime(logger_day." 12:00:00", "%Y-%m-%d %H:%M:%S")
+| timechart span=1w sum(value) as weekly_rainfall
+| where isnotnull(weekly_rainfall)</query>
+          <earliest>-16w@w</earliest>
+          <latest>now</latest>
         </search>
         <option name="charting.chart">column</option>
+        <option name="charting.axisTitleY.text">inches</option>
+        <option name="charting.legend.placement">none</option>
+      </chart>
+    </panel>
+  </row>
+  <row>
+    <panel>
+      <chart>
+        <title>Monthly rainfall (this calendar year)</title>
+        <search>
+          <query>`zentra_interval_precip` device_sn="$device_sn$"
+| eval _time=strptime(logger_day." 12:00:00", "%Y-%m-%d %H:%M:%S")
+| timechart span=1mon sum(value) as monthly_rainfall
+| where isnotnull(monthly_rainfall)</query>
+          <earliest>@y</earliest>
+          <latest>now</latest>
+        </search>
+        <option name="charting.chart">column</option>
+        <option name="charting.axisTitleY.text">inches</option>
+        <option name="charting.legend.placement">none</option>
+      </chart>
+    </panel>
+    <panel>
+      <chart>
+        <title>Annual rainfall</title>
+        <search>
+          <query>`zentra_interval_precip` device_sn="$device_sn$"
+| eval _time=strptime(logger_day." 12:00:00", "%Y-%m-%d %H:%M:%S")
+| timechart span=1y sum(value) as annual_rainfall
+| where isnotnull(annual_rainfall)</query>
+          <earliest>-5y@y</earliest>
+          <latest>now</latest>
+        </search>
+        <option name="charting.chart">column</option>
+        <option name="charting.axisTitleY.text">inches</option>
         <option name="charting.legend.placement">none</option>
       </chart>
     </panel>
